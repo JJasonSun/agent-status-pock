@@ -8,12 +8,28 @@ let package = Package(
         .package(path: "../SharedModels")
     ],
     targets: [
-        .executableTarget(
-            name: "AgentBridge",
+        .target(
+            name: "AgentBridgeCore",
             dependencies: [
                 .product(name: "AgentBridgeModels", package: "SharedModels")
             ],
+            path: "Sources/AgentBridgeCore"
+        ),
+        .executableTarget(
+            name: "AgentBridge",
+            dependencies: [
+                "AgentBridgeCore",
+                .product(name: "AgentBridgeModels", package: "SharedModels")
+            ],
             path: "Sources/AgentBridge"
+        ),
+        .testTarget(
+            name: "AgentBridgeTests",
+            dependencies: [
+                "AgentBridgeCore",
+                .product(name: "AgentBridgeModels", package: "SharedModels")
+            ],
+            path: "Tests/AgentBridgeTests"
         )
     ]
 )
