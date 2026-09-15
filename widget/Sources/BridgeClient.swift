@@ -15,8 +15,23 @@ final class BridgeClient {
         let lastActive: Double
     }
 
+    /// Codex quota reading, mirroring the bridge's `usage` object.
+    struct UsageInfo: Codable {
+        let remainingPercent: Int
+        let usedPercent: Int
+        let windowLabel: String
+        let windowMinutes: Double
+        let resetsAt: Double?
+        let planType: String?
+        let unlimited: Bool
+        let stale: Bool
+        let source: String
+        let fetchedAt: Double
+    }
+
     struct BridgeState: Codable {
         let agents: [AgentInfo]
+        let usage: UsageInfo?
     }
 
     private let baseURL: URL
@@ -76,6 +91,14 @@ enum AgentPrefs {
     static var shimmerEnabled: Bool {
         if defaults.object(forKey: "shimmerEnabled") == nil { return true }
         return defaults.bool(forKey: "shimmerEnabled")
+    }
+
+    /// Shows the Codex quota chip beside the agent status. Defaults on;
+    /// set `usageEnabled` to false in the com.touchbar.agentstatus domain
+    /// to hide it.
+    static var usageEnabled: Bool {
+        if defaults.object(forKey: "usageEnabled") == nil { return true }
+        return defaults.bool(forKey: "usageEnabled")
     }
 
     /// always: full ready state, compact: 36pt logo while idle,

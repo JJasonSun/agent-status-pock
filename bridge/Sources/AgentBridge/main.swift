@@ -5,6 +5,9 @@ let port = UInt16(ProcessInfo.processInfo.environment["AGENTBRIDGE_PORT"] ?? "39
 let hub = AgentHub()
 let server = HTTPServer(hub: hub, port: port)
 
+// Begin collecting Codex quota readings for the Touch Bar chip.
+hub.usageMonitor.start()
+
 signal(SIGPIPE, SIG_IGN)
 
 do {

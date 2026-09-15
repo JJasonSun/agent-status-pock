@@ -31,6 +31,38 @@ func stats(_ file: String) -> (full: Int, mid: Int, faint: Int) {
     return (full, mid, faint)
 }
 
+/// Counts non-background pixels in the right-hand strip of the rendered bar,
+/// which is where the Codex quota chip renders. The offscreen render paints
+/// the view 1:1 into a 2x canvas, so the strip is measured against the view's
+/// own width rather than the image width. The bar background is a dark grey
+/// below the brightness floor, so any lit pixel here is chip content.
+func rightStripLit(_ file: String, contentWidth: CGFloat, fraction: CGFloat = 0.20) -> Int {
+    let url = outDir.appendingPathComponent(file)
+    guard let img = NSImage(contentsOfFile: url.path),
+          let tiff = img.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          let data = rep.bitmapData else {
+        fatalError("unreadable \(file)")
+    }
+    let bpr = rep.bytesPerRow
+    let spp = rep.samplesPerPixel
+    let contentPixels = min(Int(contentWidth), rep.pixelsWide)
+    let startX = Int(CGFloat(contentPixels) * (1 - fraction))
+    var lit = 0
+    for y in 0..<rep.pixelsHigh {
+        for x in startX..<contentPixels {
+            let offset = y * bpr + x * spp
+            let r = Int(data[offset])
+            let g = Int(data[offset + 1])
+            let b = Int(data[offset + 2])
+            let a = Int(data[offset + spp - 1])
+            guard a > 200 else { continue }
+            if max(r, max(g, b)) > 70 { lit += 1 }
+        }
+    }
+    return lit
+}
+
 func snapshot(_ view: NSView, width: CGFloat, file: String) {
     let frame = NSRect(x: 0, y: 0, width: width, height: 30)
     view.frame = frame
@@ -56,6 +88,21 @@ func snapshot(_ view: NSView, width: CGFloat, file: String) {
 
 func agent(_ a: String, _ n: String, _ s: String, _ c: String, _ st: String, _ l: String, _ la: Double) -> BridgeClient.AgentInfo {
     BridgeClient.AgentInfo(agent: a, name: n, symbol: s, color: c, status: st, label: l, tool: nil, detail: nil, lastActive: la)
+}
+
+func quota(remaining: Int, label: String, stale: Bool) -> BridgeClient.UsageInfo {
+    BridgeClient.UsageInfo(
+        remainingPercent: remaining,
+        usedPercent: 100 - remaining,
+        windowLabel: label,
+        windowMinutes: 10080,
+        resetsAt: nil,
+        planType: "pro",
+        unlimited: false,
+        stale: stale,
+        source: stale ? "session" : "live",
+        fetchedAt: 0
+    )
 }
 
 @main
@@ -113,6 +160,27 @@ struct RenderTest {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-noagent.png")
 
+        // Codex quota chip beside the agent status.
+        statusView.apply(agents: [
+            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+        ], usage: quota(remaining: 21, label: "周", stale: false))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage.png")
+
+        // Low headroom (alerting tier), sourced from a recorded snapshot.
+        statusView.apply(agents: [
+            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+        ], usage: quota(remaining: 8, label: "周", stale: true))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-low.png")
+
+        // No reading: the right edge must stay clear.
+        statusView.apply(agents: [
+            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+        ], usage: nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-none.png")
+
         // Self-checks.
         let sweep = stats("render-working-sweep.png")
         let working = stats("render-working.png")
@@ -122,7 +190,16 @@ struct RenderTest {
         precondition(sweepBrightness - workingBrightness > 60,
                      "shimmer band does not brighten active text enough")
         precondition(noagent.faint > 150, "no-agent text missing")
+
+        let usageLit = rightStripLit("render-usage.png", contentWidth: StatusView.preferredWidth)
+        let usageLowLit = rightStripLit("render-usage-low.png", contentWidth: StatusView.preferredWidth)
+        let usageNoneLit = rightStripLit("render-usage-none.png", contentWidth: StatusView.preferredWidth)
+        precondition(usageLit > 60, "quota chip missing from the right edge")
+        precondition(usageLowLit > 60, "low-headroom quota chip missing")
+        precondition(usageNoneLit < usageLit / 3, "right edge occupied without a reading")
+
         print("checks: sweep.band=\(sweepBrightness) working.base=\(workingBrightness) noagent.faint=\(noagent.faint) — PASSED")
+        print("checks: usage.lit=\(usageLit) usageLow.lit=\(usageLowLit) usageNone.lit=\(usageNoneLit) — PASSED")
 
         print("RENDER TEST DONE")
     }

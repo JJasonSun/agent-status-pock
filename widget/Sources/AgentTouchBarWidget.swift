@@ -100,7 +100,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
                 guard let self = self else { return }
                 self.isPolling = false
                 if let state = state {
-                    self.statusView.apply(agents: state.agents)
+                    self.statusView.apply(agents: state.agents, usage: state.usage)
                 }
             }
         }

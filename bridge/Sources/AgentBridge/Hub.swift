@@ -59,6 +59,9 @@ struct AgentSnapshot: Codable {
 
 struct BridgeState: Codable {
     let agents: [AgentSnapshot]
+    /// Codex quota reading, when one is available. Optional so older
+    /// widgets that only decode `agents` keep working.
+    let usage: UsageInfo?
 }
 
 // MARK: - Activity hub
@@ -67,6 +70,8 @@ final class AgentHub: @unchecked Sendable {
 
     private let lock = NSLock()
     private var statuses: [AgentID: AgentSnapshot] = [:]
+    /// Supplies the Codex quota chip; refreshes itself in the background.
+    let usageMonitor = UsageMonitor()
     // Per-agent ordering + display-dwell bookkeeping.
     private var lastEventAt: [AgentID: Double] = [:]
     private var labelSetAt: [AgentID: Double] = [:]
@@ -335,7 +340,7 @@ final class AgentHub: @unchecked Sendable {
                 return s
             }
             .sorted { $0.lastActive > $1.lastActive }
-        return BridgeState(agents: agents)
+        return BridgeState(agents: agents, usage: usageMonitor.snapshot())
     }
 
     // MARK: Label composition

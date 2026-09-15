@@ -22,11 +22,15 @@ final class StatusView: NSView {
 
     private let iconView = NSImageView(frame: .zero)
     private let label = ShimmerLabel(frame: .zero)
+    /// Always-on Codex quota chip, right-aligned beside the agent status.
+    private let usageLabel = ShimmerLabel(frame: .zero)
 
     // MARK: State
 
     private var agents: [BridgeClient.AgentInfo] = []
     private var activeAgents: [BridgeClient.AgentInfo] = []
+    private var usage: BridgeClient.UsageInfo?
+    private var usageChipWidth: CGFloat = 0
     private var selectedIndex = 0
     private var pinned = false
     private var pinnedSince: Date?
@@ -50,6 +54,11 @@ final class StatusView: NSView {
         addSubview(iconView)
         addSubview(label)
 
+        usageLabel.setFont(size: 12, weight: .semibold)
+        usageLabel.setShimmering(false)
+        usageLabel.isHidden = true
+        addSubview(usageLabel)
+
         let tap = NSClickGestureRecognizer(target: self, action: #selector(handleTap))
         tap.allowedTouchTypes = .direct
         addGestureRecognizer(tap)
@@ -64,10 +73,14 @@ final class StatusView: NSView {
         if presentationWidth <= 1 {
             iconView.isHidden = true
             label.isHidden = true
+            usageLabel.isHidden = true
             return
         }
         if compactWhenIdle {
+            // Compact idle presentation is a bare logo; the quota chip is
+            // part of the full-width layout only.
             label.isHidden = true
+            usageLabel.isHidden = true
             iconView.isHidden = false
             iconView.frame = NSRect(
                 x: max((bounds.width - 18) / 2, 0),
@@ -79,12 +92,28 @@ final class StatusView: NSView {
         }
         label.isHidden = false
         iconView.isHidden = false
-        let maxTextWidth = max(bounds.width - 56, 60)
+
+        // The quota chip owns the right edge; the agent group stays centred
+        // in whatever space is left.
+        let chipWidth = usageLabel.isHidden ? 0 : usageChipWidth
+        let chipGap: CGFloat = chipWidth > 0 ? 12 : 0
+        let contentWidth = max(bounds.width - chipWidth - chipGap, 80)
+
+        let maxTextWidth = max(contentWidth - 56, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
         let groupWidth = 16 + 8 + textWidth
-        let groupX = max((bounds.width - groupWidth) / 2, 8)
+        let groupX = max((contentWidth - groupWidth) / 2, 8)
         iconView.frame = NSRect(x: groupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.frame = NSRect(x: groupX + 24, y: 0, width: textWidth, height: bounds.height)
+
+        if chipWidth > 0 {
+            usageLabel.frame = NSRect(
+                x: bounds.width - chipWidth,
+                y: 0,
+                width: chipWidth,
+                height: bounds.height
+            )
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -107,9 +136,12 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    func apply(agents: [BridgeClient.AgentInfo]) {
+    func apply(agents: [BridgeClient.AgentInfo], usage: BridgeClient.UsageInfo? = nil) {
         self.agents = agents
+        self.usage = usage
         activeAgents = agents.filter { $0.lastActive > 0 }
+
+        refreshUsage()
 
         if let pinnedSince = pinnedSince, Date().timeIntervalSince(pinnedSince) > 300 {
             pinned = false
@@ -150,6 +182,39 @@ final class StatusView: NSView {
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
         needsLayout = true
+    }
+
+    // MARK: Quota chip
+
+    /// Renders the Codex quota chip. Green while there is comfortable
+    /// headroom, amber under 50%, red under 20%; a snapshot-sourced reading
+    /// (recorded rather than queried) is dimmed instead of re-labelled.
+    private func refreshUsage() {
+        guard AgentPrefs.usageEnabled, let usage = usage, usage.remainingPercent >= 0 else {
+            usageChipWidth = 0
+            usageLabel.isHidden = true
+            needsLayout = true
+            return
+        }
+
+        usageLabel.text = usage.unlimited ? "∞" : "\(usage.windowLabel)\(usage.remainingPercent)%"
+        usageLabel.textColor = Self.usageColor(usage)
+        usageLabel.alphaValue = usage.stale ? 0.68 : 1
+        usageChipWidth = usageLabel.measuredWidth
+        usageLabel.isHidden = false
+        needsLayout = true
+    }
+
+    private static func usageColor(_ usage: BridgeClient.UsageInfo) -> NSColor {
+        if usage.unlimited { return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1) }
+        switch usage.remainingPercent {
+        case 50...:
+            return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1)
+        case 20..<50:
+            return NSColor.systemYellow
+        default:
+            return NSColor.systemRed
+        }
     }
 
     private func displayedAgentIndex() -> Int {

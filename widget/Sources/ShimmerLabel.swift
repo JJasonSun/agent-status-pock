@@ -77,6 +77,19 @@ final class ShimmerLabel: NSView {
         updateMaskGeometry()
     }
 
+    /// Re-sizes both text layers. Used by the compact quota chip, which
+    /// renders smaller than the main status line.
+    func setFont(size: CGFloat, weight: NSFont.Weight) {
+        font = NSFont.systemFont(ofSize: size, weight: weight)
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        for layer in [baseLayer, brightLayer] {
+            layer.contentsScale = scale
+            layer.font = font
+            layer.fontSize = size
+        }
+        updateTextGeometry()
+    }
+
     var text: String = "" {
         didSet {
             baseLayer.string = text
