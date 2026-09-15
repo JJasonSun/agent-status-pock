@@ -62,14 +62,13 @@ echo "==> Building bridge"
 (cd "$ROOT/bridge" && swift build -c release)
 
 echo "==> Installing to $INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/hooks" "$INSTALL_DIR/logs"
+mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/logs"
 cp "$ROOT/bridge/.build/release/AgentBridge" "$INSTALL_DIR/bin/agentbridge"
 cp "$ROOT/bridge/.build/release/AgentBridgeHook" "$HOOK_PATH"
-# Keep the Python hook around as a rollback path; hooks.json points at the
-# Swift binary. Remove once the Swift hook has been live for a while.
-cp "$ROOT/hooks/agentbridge-hook.py" "$INSTALL_DIR/hooks/agentbridge-hook.py"
 cp "$ROOT/uninstall.sh" "$INSTALL_DIR/uninstall.sh"
 chmod +x "$HOOK_PATH" "$INSTALL_DIR/bin/agentbridge" "$INSTALL_DIR/uninstall.sh"
+# Drop the retired Python hook if a previous install left it behind.
+rm -f "$INSTALL_DIR/hooks/agentbridge-hook.py"
 
 echo "==> Installing LaunchAgent"
 mkdir -p "$HOME/Library/LaunchAgents"
