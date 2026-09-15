@@ -18,7 +18,7 @@ test: bridge widget
 	curl -fsS -X POST localhost:39390/v1/event -d '{"agent":"claude","event":"tool_start","tool":"Edit","detail":"x"}' > /dev/null; echo "event: OK"; \
 	curl -fsS localhost:39390/v1/state | grep -q "working"; echo "state: OK"
 	@cd widget && swiftc -o dist/smoke-test tests/smoke.swift && ./dist/smoke-test
-	@cd widget && swiftc -parse-as-library -o dist/render-test tests/render.swift Sources/*.swift -I dist -L dist/lib -lPockKit -Xlinker -rpath -Xlinker "$$PWD/dist/lib" && ./dist/render-test | grep -v "^{\"ok"
+	@cd widget && swiftc -parse-as-library -o dist/render-test tests/render.swift ../SharedModels/Sources/AgentBridgeModels/Models.swift Sources/*.swift -I dist -L dist/lib -lPockKit -Xlinker -rpath -Xlinker "$$PWD/dist/lib" && ./dist/render-test | grep -v "^{\"ok"
 
 install:
 	./install.sh

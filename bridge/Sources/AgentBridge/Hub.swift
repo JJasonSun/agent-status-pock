@@ -1,68 +1,5 @@
 import Foundation
-
-// MARK: - Model
-
-enum AgentID: String, Codable, CaseIterable {
-    case claude
-    case codex
-    case opencode
-
-    var displayName: String {
-        switch self {
-        case .claude: return "Claude"
-        case .codex: return "Codex"
-        case .opencode: return "OpenCode"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .claude: return "sparkles"
-        case .codex: return "bolt.fill"
-        case .opencode: return "terminal.fill"
-        }
-    }
-
-    /// Brand color (hex RRGGBB).
-    var color: String {
-        switch self {
-        case .claude: return "D97757"   // Claude clay
-        case .codex: return "10A37F"    // OpenAI teal
-        case .opencode: return "8B5CF6" // opencode violet
-        }
-    }
-}
-
-enum AgentStatus: String, Codable {
-    case idle              // no session ever seen
-    case ready             // session open, nothing happening
-    case connected         // transient: session just started
-    case thinking
-    case answering
-    case working
-    case needsInput
-    case responseReady     // transient: answer just finished
-}
-
-struct AgentSnapshot: Codable {
-    let agent: AgentID
-    let name: String
-    let symbol: String
-    let color: String
-    var status: AgentStatus
-    var label: String
-    var tool: String?
-    var detail: String?
-    var lastActive: TimeInterval
-    var transientUntil: TimeInterval?
-}
-
-struct BridgeState: Codable {
-    let agents: [AgentSnapshot]
-    /// Codex quota reading, when one is available. Optional so older
-    /// widgets that only decode `agents` keep working.
-    let usage: UsageInfo?
-}
+import AgentBridgeModels
 
 // MARK: - Activity hub
 
@@ -91,18 +28,7 @@ final class AgentHub: @unchecked Sendable {
 
     init() {
         for agent in AgentID.allCases {
-            statuses[agent] = AgentSnapshot(
-                agent: agent,
-                name: agent.displayName,
-                symbol: agent.symbol,
-                color: agent.color,
-                status: .idle,
-                label: "No agent running",
-                tool: nil,
-                detail: nil,
-                lastActive: 0,
-                transientUntil: nil
-            )
+            statuses[agent] = .idleTemplate(for: agent)
         }
     }
 
@@ -212,10 +138,7 @@ final class AgentHub: @unchecked Sendable {
     }
 
     private func apply(event: String, agent: AgentID, tool: String?, detail: String?, eventTime: Double) {
-        var status = statuses[agent] ?? AgentSnapshot(
-            agent: agent, name: agent.displayName, symbol: agent.symbol, color: agent.color,
-            status: .idle, label: "No agent running", tool: nil, detail: nil, lastActive: 0, transientUntil: nil
-        )
+        var status = statuses[agent] ?? .idleTemplate(for: agent)
         let now = Date().timeIntervalSince1970
         status.lastActive = now
 

@@ -86,12 +86,12 @@ func snapshot(_ view: NSView, width: CGFloat, file: String) {
     print("wrote dist/\(file)")
 }
 
-func agent(_ a: String, _ n: String, _ s: String, _ c: String, _ st: String, _ l: String, _ la: Double) -> BridgeClient.AgentInfo {
-    BridgeClient.AgentInfo(agent: a, name: n, symbol: s, color: c, status: st, label: l, tool: nil, detail: nil, lastActive: la)
+func agent(_ a: AgentID, _ n: String, _ s: String, _ c: String, _ st: AgentStatus, _ l: String, _ la: Double) -> AgentSnapshot {
+    AgentSnapshot(agent: a, name: n, symbol: s, color: c, status: st, label: l, tool: nil, detail: nil, lastActive: la)
 }
 
-func quota(remaining: Int, label: String, stale: Bool) -> BridgeClient.UsageInfo {
-    BridgeClient.UsageInfo(
+func quota(remaining: Int, label: String, stale: Bool) -> UsageInfo {
+    UsageInfo(
         remainingPercent: remaining,
         usedPercent: 100 - remaining,
         windowLabel: label,
@@ -115,8 +115,8 @@ struct RenderTest {
 
         // Working (shimmering) — Claude editing, Codex idle.
         statusView.apply(agents: [
-            agent("claude", "Claude", "sparkles", "D97757", "working", "Editing code", 100),
-            agent("codex", "Codex", "bolt.fill", "10A37F", "idle", "Waiting for your request", 50),
+            agent(.claude, "Claude", "sparkles", "D97757", .working, "Editing code", 100),
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .idle, "Waiting for your request", 50),
         ])
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-working.png")
@@ -133,50 +133,50 @@ struct RenderTest {
 
         // Answering (opencode violet).
         statusView.apply(agents: [
-            agent("opencode", "OpenCode", "terminal.fill", "8B5CF6", "answering", "Answering…", 200),
-            agent("claude", "Claude", "sparkles", "D97757", "idle", "Waiting for your request", 100),
+            agent(.opencode, "OpenCode", "terminal.fill", "8B5CF6", .answering, "Answering…", 200),
+            agent(.claude, "Claude", "sparkles", "D97757", .idle, "Waiting for your request", 100),
         ])
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-answering.png")
 
         // Asking a question (yellow, breathing).
         statusView.apply(agents: [
-            agent("claude", "Claude", "sparkles", "D97757", "needsInput", "Agent is asking a question", 100),
+            agent(.claude, "Claude", "sparkles", "D97757", .needsInput, "Agent is asking a question", 100),
         ])
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-question.png")
 
         // Ready state.
         statusView.apply(agents: [
-            agent("claude", "Claude", "sparkles", "D97757", "ready", "Claude is ready", 100),
+            agent(.claude, "Claude", "sparkles", "D97757", .ready, "Claude is ready", 100),
         ])
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-ready.png")
 
         // No agent running.
         statusView.apply(agents: [
-            agent("claude", "Claude", "sparkles", "D97757", "idle", "No agent running", 0),
+            agent(.claude, "Claude", "sparkles", "D97757", .idle, "No agent running", 0),
         ])
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-noagent.png")
 
         // Codex quota chip beside the agent status.
         statusView.apply(agents: [
-            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
         ], usage: quota(remaining: 21, label: "周", stale: false))
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage.png")
 
         // Low headroom (alerting tier), sourced from a recorded snapshot.
         statusView.apply(agents: [
-            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
         ], usage: quota(remaining: 8, label: "周", stale: true))
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-low.png")
 
         // No reading: the right edge must stay clear.
         statusView.apply(agents: [
-            agent("codex", "Codex", "bolt.fill", "10A37F", "ready", "Codex is ready", 100),
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
         ], usage: nil)
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-none.png")

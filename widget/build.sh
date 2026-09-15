@@ -35,11 +35,14 @@ echo "==> Building AgentTouchBar widget"
 # The widget resolves PockKit symbols at load time from Pock's own embedded
 # framework (plugin-style, -undefined dynamic_lookup). This makes the bundle
 # load in ANY Pock version regardless of how its PockKit was built.
+# SharedModels is compiled in so the widget uses the same wire types as the bridge.
+SHARED_MODELS="../SharedModels/Sources/AgentBridgeModels/Models.swift"
 for arch in "${ARCHS[@]}"; do
     swiftc -target "${arch}-apple-macos${MIN_MACOS}" -sdk "$SDKROOT" \
         -emit-library -module-name AgentTouchBar -O \
         -I "$DIST" \
         -Xlinker -undefined -Xlinker dynamic_lookup \
+        "$SHARED_MODELS" \
         Sources/*.swift \
         -o "$DIST/archs/AgentTouchBar-${arch}"
 done

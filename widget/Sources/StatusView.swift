@@ -27,9 +27,9 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    private var agents: [BridgeClient.AgentInfo] = []
-    private var activeAgents: [BridgeClient.AgentInfo] = []
-    private var usage: BridgeClient.UsageInfo?
+    private var agents: [AgentSnapshot] = []
+    private var activeAgents: [AgentSnapshot] = []
+    private var usage: UsageInfo?
     private var usageChipWidth: CGFloat = 0
     private var selectedIndex = 0
     private var pinned = false
@@ -136,7 +136,7 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    func apply(agents: [BridgeClient.AgentInfo], usage: BridgeClient.UsageInfo? = nil) {
+    func apply(agents: [AgentSnapshot], usage: UsageInfo? = nil) {
         self.agents = agents
         self.usage = usage
         activeAgents = agents.filter { $0.lastActive > 0 }
@@ -158,11 +158,7 @@ final class StatusView: NSView {
     }
 
     private func updateIdlePresentation() {
-        let activeStatuses: Set<String> = [
-            "connected", "thinking", "answering", "working",
-            "needsInput", "responseReady"
-        ]
-        let hasAttention = activeAgents.contains { activeStatuses.contains($0.status) }
+        let hasAttention = activeAgents.contains { $0.status.isAttention }
         let mode = AgentPrefs.visibilityMode
         let widgetEnabled = AgentPrefs.widgetEnabled && AgentPrefs.hasEnabledAgents
         let shouldCollapse = !hasAttention && mode != "always"
@@ -205,7 +201,7 @@ final class StatusView: NSView {
         needsLayout = true
     }
 
-    private static func usageColor(_ usage: BridgeClient.UsageInfo) -> NSColor {
+    private static func usageColor(_ usage: UsageInfo) -> NSColor {
         if usage.unlimited { return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1) }
         switch usage.remainingPercent {
         case 50...:
@@ -248,31 +244,23 @@ final class StatusView: NSView {
 
         let shimmerAllowed = AgentPrefs.shimmerEnabled
         switch agent.status {
-        case "thinking":
+        case .thinking, .answering, .working:
             iconView.contentTintColor = brand
             setDisplayText(text, textColor: .white, shimmer: shimmerAllowed)
             setAmbient(.none)
-        case "answering":
-            iconView.contentTintColor = brand
-            setDisplayText(text, textColor: .white, shimmer: shimmerAllowed)
-            setAmbient(.none)
-        case "working":
-            iconView.contentTintColor = brand
-            setDisplayText(text, textColor: .white, shimmer: shimmerAllowed)
-            setAmbient(.none)
-        case "responseReady":
+        case .responseReady:
             iconView.contentTintColor = NSColor.systemGreen
             setDisplayText(text, textColor: NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1), shimmer: false)
             setAmbient(.breathe)
-        case "connected":
+        case .connected:
             iconView.contentTintColor = brand
             setDisplayText(text, textColor: brand, shimmer: false)
             setAmbient(.breathe)
-        case "needsInput":
+        case .needsInput:
             iconView.contentTintColor = NSColor.systemYellow
             setDisplayText(text, textColor: NSColor.systemYellow, shimmer: false)
             setAmbient(.breathe)
-        default: // ready / idle
+        case .idle, .ready:
             iconView.contentTintColor = brand
             setDisplayText(text, textColor: .white, shimmer: false)
             setAmbient(.pulse)
@@ -287,13 +275,12 @@ final class StatusView: NSView {
         layout()
     }
 
-    private func logo(for agent: String) -> NSImage? {
+    private func logo(for agent: AgentID) -> NSImage? {
         let resource: String
         switch agent {
-        case "claude": resource = "Claude"
-        case "codex": resource = "ChatGPT"
-        case "opencode": resource = "OpenCode"
-        default: return nil
+        case .claude: resource = "Claude"
+        case .codex: resource = "ChatGPT"
+        case .opencode: resource = "OpenCode"
         }
         guard let image = Bundle(for: type(of: self)).image(forResource: resource) else {
             return nil

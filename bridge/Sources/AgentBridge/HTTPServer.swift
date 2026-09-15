@@ -1,4 +1,5 @@
 import Foundation
+import AgentBridgeModels
 
 // MARK: - HTTP request
 

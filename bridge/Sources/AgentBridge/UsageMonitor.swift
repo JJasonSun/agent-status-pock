@@ -1,25 +1,5 @@
 import Foundation
-
-// MARK: - Model
-
-/// Codex quota state, shaped for a compact Touch Bar chip.
-struct UsageInfo: Codable {
-    let remainingPercent: Int
-    let usedPercent: Int
-    let windowLabel: String
-    let windowMinutes: Double
-    let resetsAt: TimeInterval?
-    let planType: String?
-    let unlimited: Bool
-    /// Whether the reading has aged past `staleAfter`. Recomputed on every
-    /// read, so a snapshot taken seconds ago is not reported as stale.
-    var stale: Bool
-    /// "live" (app-server query) or "session" (recorded snapshot).
-    let source: String
-    /// When the underlying number was observed, used to keep the freshest
-    /// reading when both sources are available.
-    let fetchedAt: TimeInterval
-}
+import AgentBridgeModels
 
 // MARK: - Monitor
 

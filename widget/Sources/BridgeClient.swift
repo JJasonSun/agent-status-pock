@@ -1,38 +1,9 @@
 import Foundation
 import AppKit
 
+/// Thin HTTP client for AgentBridge. Wire types come from SharedModels
+/// (compiled into this module by build.sh).
 final class BridgeClient {
-
-    struct AgentInfo: Codable {
-        let agent: String
-        let name: String
-        let symbol: String
-        let color: String
-        let status: String
-        let label: String
-        let tool: String?
-        let detail: String?
-        let lastActive: Double
-    }
-
-    /// Codex quota reading, mirroring the bridge's `usage` object.
-    struct UsageInfo: Codable {
-        let remainingPercent: Int
-        let usedPercent: Int
-        let windowLabel: String
-        let windowMinutes: Double
-        let resetsAt: Double?
-        let planType: String?
-        let unlimited: Bool
-        let stale: Bool
-        let source: String
-        let fetchedAt: Double
-    }
-
-    struct BridgeState: Codable {
-        let agents: [AgentInfo]
-        let usage: UsageInfo?
-    }
 
     private let baseURL: URL
     private let session: URLSession
@@ -110,7 +81,7 @@ enum AgentPrefs {
     }
 
     static var hasEnabledAgents: Bool {
-        return ["claude", "codex", "opencode"].contains { isAgentEnabled($0) }
+        return AgentID.allCases.contains { isAgentEnabled($0.rawValue) }
     }
 
     static var showOnlyWhileActive: Bool {
