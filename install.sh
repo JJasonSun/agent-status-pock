@@ -9,7 +9,7 @@ if [[ -n "$SCRIPT_PATH" && -f "$SCRIPT_PATH" ]]; then
     ROOT="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 fi
 INSTALL_DIR="$HOME/.agentbridge"
-HOOK_PATH="$INSTALL_DIR/hooks/agentbridge-hook.py"
+HOOK_PATH="$INSTALL_DIR/bin/agentbridge-hook"
 
 die() {
     echo "Error: $*" >&2
@@ -64,7 +64,10 @@ echo "==> Building bridge"
 echo "==> Installing to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/hooks" "$INSTALL_DIR/logs"
 cp "$ROOT/bridge/.build/release/AgentBridge" "$INSTALL_DIR/bin/agentbridge"
-cp "$ROOT/hooks/agentbridge-hook.py" "$HOOK_PATH"
+cp "$ROOT/bridge/.build/release/AgentBridgeHook" "$HOOK_PATH"
+# Keep the Python hook around as a rollback path; hooks.json points at the
+# Swift binary. Remove once the Swift hook has been live for a while.
+cp "$ROOT/hooks/agentbridge-hook.py" "$INSTALL_DIR/hooks/agentbridge-hook.py"
 cp "$ROOT/uninstall.sh" "$INSTALL_DIR/uninstall.sh"
 chmod +x "$HOOK_PATH" "$INSTALL_DIR/bin/agentbridge" "$INSTALL_DIR/uninstall.sh"
 
@@ -117,6 +120,12 @@ if os.path.exists(settings_path):
 hooks = settings.setdefault("hooks", {})
 for event, entries in snippet["hooks"].items():
     hooks.setdefault(event, [])
+    # Drop the old Python hook path so a reinstall does not leave both
+    # the .py and the Swift binary registered for the same event.
+    hooks[event] = [
+        entry for entry in hooks[event]
+        if "agentbridge-hook.py" not in json.dumps(entry)
+    ]
     for entry in entries:
         if entry not in hooks[event]:
             hooks[event].append(entry)

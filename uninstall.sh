@@ -31,7 +31,7 @@ with open(path) as f:
 hooks = settings.get("hooks", {})
 for event in list(hooks.keys()):
     hooks[event] = [e for e in hooks[event]
-                    if "agentbridge-hook.py" not in json.dumps(e)]
+                    if "agentbridge-hook" not in json.dumps(e)]
     if not hooks[event]:
         del hooks[event]
 if not hooks:
@@ -56,7 +56,7 @@ with open(path) as f:
 hooks = document.get("hooks", {})
 for event in list(hooks):
     hooks[event] = [e for e in hooks[event]
-                    if "agentbridge-hook.py" not in json.dumps(e)]
+                    if "agentbridge-hook" not in json.dumps(e)]
     if not hooks[event]:
         del hooks[event]
 if not hooks and set(document) == {"hooks"}:

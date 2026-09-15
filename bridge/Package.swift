@@ -23,6 +23,10 @@ let package = Package(
             ],
             path: "Sources/AgentBridge"
         ),
+        .executableTarget(
+            name: "AgentBridgeHook",
+            path: "Sources/AgentBridgeHook"
+        ),
         .testTarget(
             name: "AgentBridgeTests",
             dependencies: [
