@@ -109,11 +109,15 @@ with open(snippet_path) as f:
     snippet = json.load(f)
 settings = {}
 if os.path.exists(settings_path):
-    with open(settings_path) as f:
-        settings = json.load(f)
     backup = settings_path + ".bak-agentbridge"
     if not os.path.exists(backup):
         shutil.copy2(settings_path, backup)
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+    except (ValueError, OSError):
+        print("    warning: could not parse %s; starting from an empty file" % settings_path)
+        settings = {}
 hooks = settings.setdefault("hooks", {})
 for event, entries in snippet["hooks"].items():
     hooks.setdefault(event, [])
@@ -132,14 +136,20 @@ PYEOF
 echo "==> Installing Codex hooks"
 CODEX_HOOKS="$HOME/.codex/hooks.json"
 python3 - "$CODEX_HOOKS" "$ROOT/hooks/codex/hooks.json.template" "$HOOK_PATH" <<'PYEOF'
-import json, os, sys
+import json, os, shutil, sys
 path, template_path, hook_path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(template_path) as f:
     template = json.loads(f.read().replace("@@HOOK_PATH@@", hook_path))
 hooks = {}
 if os.path.exists(path):
-    with open(path) as f:
-        hooks = json.load(f)
+    try:
+        with open(path) as f:
+            hooks = json.load(f)
+    except (ValueError, OSError):
+        if not os.path.exists(path + ".bak-agentbridge"):
+            shutil.copy2(path, path + ".bak-agentbridge")
+        print("    warning: could not parse %s; starting from an empty file" % path)
+        hooks = {}
 events = hooks.setdefault("hooks", {})
 for event, entries in template["hooks"].items():
     events.setdefault(event, [])
