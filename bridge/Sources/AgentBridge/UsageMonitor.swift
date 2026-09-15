@@ -53,6 +53,8 @@ final class UsageMonitor: @unchecked Sendable {
 
     private var codexBinaryPath: String?
     private var didResolveBinary = false
+    /// Invoked after a new reading is stored. Must not re-enter UsageMonitor.
+    var onStateChange: (() -> Void)?
 
     // MARK: Lifecycle
 
@@ -104,9 +106,17 @@ final class UsageMonitor: @unchecked Sendable {
     /// which one produced it.
     private func store(_ info: UsageInfo) {
         lock.lock()
-        defer { lock.unlock() }
-        if let existing = cached, existing.fetchedAt >= info.fetchedAt { return }
-        cached = info
+        let accepted: Bool
+        if let existing = cached, existing.fetchedAt >= info.fetchedAt {
+            accepted = false
+        } else {
+            cached = info
+            accepted = true
+        }
+        lock.unlock()
+        if accepted {
+            onStateChange?()
+        }
     }
 
     // MARK: Live query

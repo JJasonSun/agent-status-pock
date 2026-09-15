@@ -9,6 +9,9 @@ final class AgentHub: @unchecked Sendable {
     private var statuses: [AgentID: AgentSnapshot] = [:]
     /// Supplies the Codex quota chip; refreshes itself in the background.
     let usageMonitor = UsageMonitor()
+    /// Invoked after the hub lock is released whenever an event mutated state.
+    /// Used to push a fresh snapshot to the state file; must not re-enter Hub.
+    var onStateChange: (() -> Void)?
     // Per-agent ordering + display-dwell bookkeeping.
     private var lastEventAt: [AgentID: Double] = [:]
     private var labelSetAt: [AgentID: Double] = [:]
@@ -121,15 +124,23 @@ final class AgentHub: @unchecked Sendable {
         }
         apply(event: event, agent: agent, tool: tool, detail: detail, eventTime: eventTime)
         lock.unlock()
+        onStateChange?()
     }
 
     private func applyHeldEvent(for agent: AgentID) {
         lock.lock()
-        defer { lock.unlock() }
-        guard let held = heldEvent[agent] else { return }
-        if let last = lastEventAt[agent], held.ts < last - staleTolerance { return }
+        guard let held = heldEvent[agent] else {
+            lock.unlock()
+            return
+        }
+        if let last = lastEventAt[agent], held.ts < last - staleTolerance {
+            lock.unlock()
+            return
+        }
         heldEvent[agent] = nil
         apply(event: held.event, agent: agent, tool: held.tool, detail: held.detail, eventTime: held.ts)
+        lock.unlock()
+        onStateChange?()
     }
 
     private func isQuietTransition(_ event: String) -> Bool {

@@ -54,8 +54,12 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
 
     private let statusView: StatusView
     private let client = BridgeClient()
-    private var pollTimer: Timer?
-    private var isPolling = false
+    private let stateWatcher = StateFileWatcher()
+    /// Slow HTTP fallback while the state file is unavailable (bridge not
+    /// started yet, or an older bridge that does not publish one).
+    private var fallbackTimer: Timer?
+    private var isFetching = false
+    private var receivedFromFile = false
 
     override public required init() {
         statusView = StatusView(frame: NSRect(x: 0, y: 0, width: StatusView.preferredWidth, height: 30))
@@ -64,42 +68,62 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
         statusView.onTap = { [weak self] in
             self?.statusView.cycleSelection()
         }
+        stateWatcher.onState = { [weak self] state in
+            guard let self else { return }
+            self.receivedFromFile = true
+            self.stopFallback()
+            self.statusView.apply(agents: state.agents, usage: state.usage)
+        }
         AgentTouchBarWidget.shared = self
     }
 
     // MARK: Lifecycle
 
     @objc public func viewWillAppear() {
-        startPolling()
+        startUpdates()
     }
 
     @objc public func viewDidDisappear() {
-        stopPolling()
+        stopUpdates()
     }
 
-    private func startPolling() {
-        guard pollTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            self?.poll()
+    private func startUpdates() {
+        stateWatcher.start()
+        startFallback()
+        // One immediate HTTP fetch so the bar is not blank before the first
+        // file write or if the bridge predates state-file publishing.
+        fetchOverHTTP()
+    }
+
+    private func stopUpdates() {
+        stateWatcher.stop()
+        stopFallback()
+    }
+
+    private func startFallback() {
+        guard fallbackTimer == nil else { return }
+        let timer = Timer(timeInterval: 10.0, repeats: true) { [weak self] _ in
+            self?.fetchOverHTTP()
         }
         RunLoop.main.add(timer, forMode: .common)
-        pollTimer = timer
-        poll()
+        fallbackTimer = timer
     }
 
-    private func stopPolling() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+    private func stopFallback() {
+        fallbackTimer?.invalidate()
+        fallbackTimer = nil
     }
 
-    private func poll() {
-        guard !isPolling else { return }
-        isPolling = true
+    private func fetchOverHTTP() {
+        // Once the file path is delivering, HTTP is only a health net; skip
+        // while a request is already in flight.
+        guard !isFetching else { return }
+        isFetching = true
         client.fetchState { [weak self] state in
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.isPolling = false
-                if let state = state {
+                guard let self else { return }
+                self.isFetching = false
+                if let state, !self.receivedFromFile {
                     self.statusView.apply(agents: state.agents, usage: state.usage)
                 }
             }
