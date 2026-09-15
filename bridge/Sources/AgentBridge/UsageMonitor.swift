@@ -11,11 +11,13 @@ struct UsageInfo: Codable {
     let resetsAt: TimeInterval?
     let planType: String?
     let unlimited: Bool
-    /// True when the numbers came from a recorded session snapshot rather
-    /// than a live account query.
-    let stale: Bool
+    /// Whether the reading has aged past `staleAfter`. Recomputed on every
+    /// read, so a snapshot taken seconds ago is not reported as stale.
+    var stale: Bool
     /// "live" (app-server query) or "session" (recorded snapshot).
     let source: String
+    /// When the underlying number was observed, used to keep the freshest
+    /// reading when both sources are available.
     let fetchedAt: TimeInterval
 }
 
@@ -66,6 +68,8 @@ final class UsageMonitor: @unchecked Sendable {
     private let liveInterval: TimeInterval = 600
     /// Hard ceiling for one live query.
     private let liveTimeout: TimeInterval = 12
+    /// A reading older than this is reported as stale (the widget dims it).
+    private let staleAfter: TimeInterval = 180
 
     private var codexBinaryPath: String?
     private var didResolveBinary = false
@@ -91,7 +95,9 @@ final class UsageMonitor: @unchecked Sendable {
     func snapshot() -> UsageInfo? {
         lock.lock()
         defer { lock.unlock() }
-        return cached
+        guard var info = cached else { return nil }
+        info.stale = Date().timeIntervalSince1970 - info.fetchedAt > staleAfter
+        return info
     }
 
     // MARK: Refresh
@@ -111,10 +117,16 @@ final class UsageMonitor: @unchecked Sendable {
         }
     }
 
+    /// Keeps the reading that describes the most recent observation. The
+    /// latest local snapshot is usually fresher than the last live query
+    /// while Codex is in use, and vice versa while it is idle, so the two
+    /// sources are ordered by when their number was observed rather than by
+    /// which one produced it.
     private func store(_ info: UsageInfo) {
         lock.lock()
+        defer { lock.unlock() }
+        if let existing = cached, existing.fetchedAt >= info.fetchedAt { return }
         cached = info
-        lock.unlock()
     }
 
     // MARK: Live query
@@ -230,8 +242,8 @@ final class UsageMonitor: @unchecked Sendable {
             resetsAt: number(primary["resetsAt"]),
             planType: limit["planType"] as? String,
             unlimited: (credits?["unlimited"] as? Bool) ?? false,
-            stale: false,
-            source: "live"
+            source: "live",
+            fetchedAt: Date().timeIntervalSince1970
         )
     }
 
@@ -268,6 +280,10 @@ final class UsageMonitor: @unchecked Sendable {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
 
+        // Used when the record itself carries no usable timestamp.
+        let fallbackObservedAt = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970
+
         // The quota payload is appended as sessions progress, so the tail is
         // where the freshest reading lives.
         let maxBytes: UInt64 = 512 * 1024
@@ -282,9 +298,27 @@ final class UsageMonitor: @unchecked Sendable {
                   text.contains("\"rate_limits\"") else { continue }
             guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
                   let limits = findRateLimits(in: object) else { continue }
-            if let info = usage(fromRecorded: limits) { return info }
+            let observedAt = Self.observedAt(from: object, fallback: fallbackObservedAt)
+            if let info = usage(fromRecorded: limits, observedAt: observedAt) { return info }
         }
         return nil
+    }
+
+    /// Reads the recording's own timestamp so readings from the two sources
+    /// can be compared by age. Formatters are built per call: they are not
+    /// Sendable, and this runs a handful of times per refresh at most.
+    private static func observedAt(from object: Any, fallback: TimeInterval) -> TimeInterval {
+        guard let text = (object as? [String: Any])?["timestamp"] as? String else { return fallback }
+
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: text) {
+            return date.timeIntervalSince1970
+        }
+
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: text)?.timeIntervalSince1970 ?? fallback
     }
 
     private func findRateLimits(in object: Any) -> [String: Any]? {
@@ -301,7 +335,7 @@ final class UsageMonitor: @unchecked Sendable {
         return nil
     }
 
-    private func usage(fromRecorded limits: [String: Any]) -> UsageInfo? {
+    private func usage(fromRecorded limits: [String: Any], observedAt: TimeInterval) -> UsageInfo? {
         guard let primary = limits["primary"] as? [String: Any] else { return nil }
         let credits = limits["credits"] as? [String: Any]
         return makeInfo(
@@ -310,8 +344,8 @@ final class UsageMonitor: @unchecked Sendable {
             resetsAt: number(primary["resets_at"]),
             planType: limits["plan_type"] as? String,
             unlimited: (credits?["unlimited"] as? Bool) ?? false,
-            stale: true,
-            source: "session"
+            source: "session",
+            fetchedAt: observedAt
         )
     }
 
@@ -323,21 +357,19 @@ final class UsageMonitor: @unchecked Sendable {
         resetsAt: Double?,
         planType: String?,
         unlimited: Bool,
-        stale: Bool,
-        source: String
+        source: String,
+        fetchedAt: TimeInterval
     ) -> UsageInfo? {
         guard let windowMinutes, windowMinutes > 0 else { return nil }
 
         var used = min(max(usedPercent ?? 0, 0), 100)
         var effectiveResetsAt = resetsAt
-        var effectiveStale = stale
 
         // A window whose reset time has already passed rolled over, so the
         // recorded percentage no longer describes the current period.
         if let resets = resetsAt, resets > 0, resets < Date().timeIntervalSince1970 {
             used = 0
             effectiveResetsAt = nil
-            effectiveStale = false
         }
 
         let remaining = unlimited ? 100 : Int((100 - used).rounded())
@@ -349,9 +381,9 @@ final class UsageMonitor: @unchecked Sendable {
             resetsAt: effectiveResetsAt,
             planType: planType,
             unlimited: unlimited,
-            stale: effectiveStale,
+            stale: false,
             source: source,
-            fetchedAt: Date().timeIntervalSince1970
+            fetchedAt: fetchedAt
         )
     }
 
