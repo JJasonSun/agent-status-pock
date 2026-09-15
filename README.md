@@ -24,9 +24,9 @@
 ## Install
 
 Requirements: macOS 15 or newer, a MacBook Pro with a Touch Bar,
-[Pock](https://pock.app) 0.9.0-22 or later, and Python 3. Python is used only to
-merge agent hook settings; it is available with Xcode Command Line Tools or
-from [python.org](https://www.python.org/downloads/macos/).
+[Pock](https://pock.app) 0.9.0-22 or later, and Python 3 (used only to merge
+agent hook settings; available with Xcode Command Line Tools or from
+[python.org](https://www.python.org/downloads/macos/)).
 
 Run one command in Terminal. It downloads the latest prebuilt universal release,
 installs the widget and local bridge, configures **Claude Code, Codex CLI, and
@@ -88,13 +88,20 @@ A source build requires Xcode Command Line Tools and Python 3.
 
 ```text
 Claude Code ── hooks ──┐
-Codex CLI  ─── hooks ──┼──> AgentBridge (127.0.0.1:3939) <── Pock widget
-opencode   ─── plugin ─┘              local HTTP polling
+Codex CLI  ─── hooks ──┼──> agentbridge-hook ──> AgentBridge (127.0.0.1:3939)
+opencode   ─── plugin ─┘                              │
+                                          ~/.agentbridge/state.json
+                                                      │ DispatchSource
+                                                      ▼
+                                                 Pock widget
 ```
 
-Agent hooks send small activity events to AgentBridge. The Pock widget polls
-the local bridge every 300 ms and renders the latest agent state. AgentBridge
-runs as a per-user macOS LaunchAgent from `~/.agentbridge`.
+Agent hooks send small activity events through a lightweight local CLI to
+AgentBridge. The bridge atomically writes `~/.agentbridge/state.json` on
+every change (plus a 1s tick for time-based expiry); the Pock widget watches
+that file and renders immediately. HTTP `/v1/state` remains for debugging and
+as a fallback. AgentBridge runs as a per-user macOS LaunchAgent from
+`~/.agentbridge`.
 
 | Activity | Claude Code | Codex CLI | OpenCode |
 |---|---:|---:|---:|
@@ -111,6 +118,8 @@ You can choose which agents appear and toggle the shimmer animation.
 | Environment variable | Default | Purpose |
 |---|---:|---|
 | `AGENTBRIDGE_PORT` | `3939` | Local bridge port |
+| `AGENTBRIDGE_URL` | `http://127.0.0.1:3939` | Bridge base URL used by hooks |
+| `AGENTBRIDGE_STATE` | `~/.agentbridge/state.json` | State file the widget watches |
 
 If you change the port in the LaunchAgent plist, the widget and hooks must use
 the same port.
