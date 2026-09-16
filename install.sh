@@ -138,6 +138,13 @@ print("    merged into ~/.claude/settings.json")
 PYEOF
 
 echo "==> Installing Codex hooks"
+# Prefer a single representation: if config.toml already carries
+# AgentBridge [[hooks.*]] tables (newer Codex), do not also write
+# hooks.json — Codex warns and loads both.
+CODEX_CONFIG="$HOME/.codex/config.toml"
+if [[ -f "$CODEX_CONFIG" ]] && grep -q "agentbridge-hook" "$CODEX_CONFIG" 2>/dev/null; then
+    echo "    ~/.codex/config.toml already has AgentBridge hooks; skipping hooks.json"
+else
 CODEX_HOOKS="$HOME/.codex/hooks.json"
 python3 - "$CODEX_HOOKS" "$ROOT/hooks/codex/hooks.json.template" "$HOOK_PATH" <<'PYEOF'
 import json, os, sys
@@ -166,6 +173,7 @@ with open(temp_path, "w") as f:
 os.replace(temp_path, path)
 print("    wrote ~/.codex/hooks.json (run /hooks in Codex to trust the new hooks)")
 PYEOF
+fi
 
 # Newer Codex also stores hooks in config.toml. Rewrite any retired Python
 # hook commands so a reinstall does not leave a broken path behind.
