@@ -167,6 +167,33 @@ os.replace(temp_path, path)
 print("    wrote ~/.codex/hooks.json (run /hooks in Codex to trust the new hooks)")
 PYEOF
 
+# Newer Codex also stores hooks in config.toml. Rewrite any retired Python
+# hook commands so a reinstall does not leave a broken path behind.
+python3 - "$HOOK_PATH" <<'PYEOF'
+import os, sys
+from pathlib import Path
+hook_path = sys.argv[1]
+cfg = Path(os.path.expanduser("~/.codex/config.toml"))
+if not cfg.exists():
+    sys.exit(0)
+text = cfg.read_text()
+replacements = [
+    ("/usr/bin/python3 $HOME/.agentbridge/hooks/agentbridge-hook.py codex", hook_path + " codex"),
+    ("/usr/bin/python3 " + os.path.expanduser("~/.agentbridge/hooks/agentbridge-hook.py") + " codex", hook_path + " codex"),
+    (os.path.expanduser("~/.agentbridge/hooks/agentbridge-hook.py") + " codex", hook_path + " codex"),
+]
+changed = 0
+for old, new in replacements:
+    if old in text:
+        changed += text.count(old)
+        text = text.replace(old, new)
+if changed:
+    cfg.write_text(text)
+    print(f"    rewrote {changed} hook command(s) in ~/.codex/config.toml")
+else:
+    print("    ~/.codex/config.toml has no retired agentbridge-hook.py commands")
+PYEOF
+
 echo "==> Installing opencode plugin"
 mkdir -p "$HOME/.config/opencode/plugins"
 OPENCODE_PLUGIN="$HOME/.config/opencode/plugins/agentbridge.js"
