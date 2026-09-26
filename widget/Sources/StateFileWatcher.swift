@@ -13,6 +13,7 @@ final class StateFileWatcher {
     private var source: DispatchSourceFileSystemObject?
     private var fd: Int32 = -1
     private var armedPath: String?
+    private var isRunning = false
 
     /// Called on the main queue with each successfully decoded snapshot.
     var onState: ((BridgeState) -> Void)?
@@ -30,26 +31,31 @@ final class StateFileWatcher {
 
     func start() {
         queue.async { [weak self] in
-            self?.reload()
-            self?.arm()
+            guard let self else { return }
+            self.isRunning = true
+            self.reload()
+            self.arm()
         }
     }
 
     func stop() {
         queue.async { [weak self] in
-            self?.source?.cancel()
-            self?.source = nil
-            if let fd = self?.fd, fd >= 0 {
-                close(fd)
-                self?.fd = -1
+            guard let self else { return }
+            self.isRunning = false
+            self.source?.cancel()
+            self.source = nil
+            if self.fd >= 0 {
+                close(self.fd)
+                self.fd = -1
             }
-            self?.armedPath = nil
+            self.armedPath = nil
         }
     }
 
     // MARK: - Private (queue-confined)
 
     private func arm() {
+        guard isRunning else { return }
         source?.cancel()
         source = nil
         if fd >= 0 {
@@ -59,7 +65,14 @@ final class StateFileWatcher {
         armedPath = nil
 
         let newFD = open(path, O_EVTONLY)
-        guard newFD >= 0 else { return }
+        guard newFD >= 0 else {
+            // Mid-rename or bridge not up yet — retry so the watch cannot
+            // die permanently after a single failed open.
+            queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.arm()
+            }
+            return
+        }
 
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: newFD,
