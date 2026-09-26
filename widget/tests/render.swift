@@ -63,6 +63,36 @@ func rightStripLit(_ file: String, contentWidth: CGFloat, fraction: CGFloat = 0.
     return lit
 }
 
+/// Counts non-background pixels in the strip just left of the quota chip,
+/// where the system RAM chip renders (~68–86% of the content width).
+func middleStripLit(_ file: String, contentWidth: CGFloat, startFraction: CGFloat = 0.68, endFraction: CGFloat = 0.86) -> Int {
+    let url = outDir.appendingPathComponent(file)
+    guard let img = NSImage(contentsOfFile: url.path),
+          let tiff = img.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          let data = rep.bitmapData else {
+        fatalError("unreadable \(file)")
+    }
+    let bpr = rep.bytesPerRow
+    let spp = rep.samplesPerPixel
+    let contentPixels = min(Int(contentWidth), rep.pixelsWide)
+    let startX = Int(CGFloat(contentPixels) * startFraction)
+    let endX = Int(CGFloat(contentPixels) * endFraction)
+    var lit = 0
+    for y in 0..<rep.pixelsHigh {
+        for x in startX..<endX {
+            let offset = y * bpr + x * spp
+            let r = Int(data[offset])
+            let g = Int(data[offset + 1])
+            let b = Int(data[offset + 2])
+            let a = Int(data[offset + spp - 1])
+            guard a > 200 else { continue }
+            if max(r, max(g, b)) > 70 { lit += 1 }
+        }
+    }
+    return lit
+}
+
 func snapshot(_ view: NSView, width: CGFloat, file: String) {
     let frame = NSRect(x: 0, y: 0, width: width, height: 30)
     view.frame = frame
@@ -101,6 +131,15 @@ func quota(remaining: Int, label: String, stale: Bool) -> UsageInfo {
         unlimited: false,
         stale: stale,
         source: stale ? "session" : "live",
+        fetchedAt: 0
+    )
+}
+
+func memory(usedGB: Double, percent: Int) -> MemoryInfo {
+    MemoryInfo(
+        usedBytes: UInt64(usedGB * 1_073_741_824),
+        totalBytes: 34_359_738_368,
+        usedPercent: percent,
         fetchedAt: 0
     )
 }
@@ -181,6 +220,38 @@ struct RenderTest {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-none.png")
 
+        // Memory + quota chips side by side (comfortable RAM).
+        statusView.apply(agents: [
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
+        ], usage: quota(remaining: 21, label: "周", stale: false),
+           memory: memory(usedGB: 12.4, percent: 62))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-memory.png")
+
+        // High memory pressure (red tier).
+        statusView.apply(agents: [
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
+        ], usage: quota(remaining: 21, label: "周", stale: false),
+           memory: memory(usedGB: 30.1, percent: 92))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-memory-high.png")
+
+        // Memory only (no quota).
+        statusView.apply(agents: [
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
+        ], usage: nil,
+           memory: memory(usedGB: 18.0, percent: 75))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-memory-only.png")
+
+        // No memory reading: right side must not invent a chip.
+        statusView.apply(agents: [
+            agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
+        ], usage: quota(remaining: 21, label: "周", stale: false),
+           memory: nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        snapshot(statusView, width: StatusView.preferredWidth, file: "render-memory-none.png")
+
         // Self-checks.
         let sweep = stats("render-working-sweep.png")
         let working = stats("render-working.png")
@@ -198,8 +269,17 @@ struct RenderTest {
         precondition(usageLowLit > 60, "low-headroom quota chip missing")
         precondition(usageNoneLit < usageLit / 3, "right edge occupied without a reading")
 
+        // Memory chip occupies a strip left of the quota chip (~28–42%).
+        let memLit = middleStripLit("render-memory.png", contentWidth: StatusView.preferredWidth)
+        let memOnlyLit = middleStripLit("render-memory-only.png", contentWidth: StatusView.preferredWidth)
+        let memNoneLit = middleStripLit("render-memory-none.png", contentWidth: StatusView.preferredWidth)
+        precondition(memLit > 40, "memory chip missing beside the quota chip")
+        precondition(memOnlyLit > 40, "memory chip missing when quota is absent")
+        precondition(memNoneLit < memLit / 3, "memory strip occupied without a reading")
+
         print("checks: sweep.band=\(sweepBrightness) working.base=\(workingBrightness) noagent.faint=\(noagent.faint) — PASSED")
         print("checks: usage.lit=\(usageLit) usageLow.lit=\(usageLowLit) usageNone.lit=\(usageNoneLit) — PASSED")
+        print("checks: memory.lit=\(memLit) memoryOnly.lit=\(memOnlyLit) memoryNone.lit=\(memNoneLit) — PASSED")
 
         print("RENDER TEST DONE")
     }

@@ -159,6 +159,22 @@ public struct UsageInfo: Codable, Sendable {
     }
 }
 
+// MARK: - System memory
+
+public struct MemoryInfo: Codable, Sendable {
+    public let usedBytes: UInt64
+    public let totalBytes: UInt64
+    public let usedPercent: Int
+    public let fetchedAt: TimeInterval
+
+    public init(usedBytes: UInt64, totalBytes: UInt64, usedPercent: Int, fetchedAt: TimeInterval) {
+        self.usedBytes = usedBytes
+        self.totalBytes = totalBytes
+        self.usedPercent = usedPercent
+        self.fetchedAt = fetchedAt
+    }
+}
+
 // MARK: - Bridge payload
 
 public struct BridgeState: Codable, Sendable {
@@ -166,9 +182,12 @@ public struct BridgeState: Codable, Sendable {
     /// Codex quota reading, when one is available. Optional so older
     /// widgets that only decode `agents` keep working.
     public let usage: UsageInfo?
+    /// System RAM reading for the Touch Bar chip.
+    public let memory: MemoryInfo?
 
-    public init(agents: [AgentSnapshot], usage: UsageInfo?) {
+    public init(agents: [AgentSnapshot], usage: UsageInfo? = nil, memory: MemoryInfo? = nil) {
         self.agents = agents
         self.usage = usage
+        self.memory = memory
     }
 }

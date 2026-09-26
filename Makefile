@@ -22,6 +22,7 @@ test: unit bridge widget
 	curl -fsS localhost:39390/v1/state | grep -q "working"; echo "state: OK"; \
 	for attempt in $$(seq 1 20); do grep -q '"working"' /tmp/ab-test-state.json 2>/dev/null && break; test $$attempt -lt 20 || { echo "state file never showed working" >&2; exit 1; }; sleep 0.1; done; \
 	echo "state file: OK"; \
+	curl -fsS localhost:39390/v1/state | grep -q '"memory"'; echo "memory: OK"; \
 	echo '{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/tmp/hook.swift"}}' \
 	  | AGENTBRIDGE_URL=http://127.0.0.1:39390 ./bridge/.build/release/AgentBridgeHook claude; \
 	for attempt in $$(seq 1 20); do grep -q 'hook.swift' /tmp/ab-test-state.json 2>/dev/null && break; test $$attempt -lt 20 || { echo "swift hook never reached the bridge" >&2; exit 1; }; sleep 0.1; done; \

@@ -10,9 +10,10 @@ import AppKit
 /// - needs input                          → amber pulsing text
 final class StatusView: NSView {
 
-    /// Bounded width: wide enough for useful status text, but leaves room
-    /// for Pock widgets and the system control strip on either side.
-    static let preferredWidth: CGFloat = 360
+    /// Bounded width: wide enough for useful status text and the two
+    /// right-side chips, but leaves room for Pock widgets and the system
+    /// control strip on either side.
+    static let preferredWidth: CGFloat = 420
 
     // MARK: Callbacks
 
@@ -22,6 +23,8 @@ final class StatusView: NSView {
 
     private let iconView = NSImageView(frame: .zero)
     private let label = ShimmerLabel(frame: .zero)
+    /// System RAM chip, immediately left of the quota chip.
+    private let memoryLabel = ShimmerLabel(frame: .zero)
     /// Always-on Codex quota chip, right-aligned beside the agent status.
     private let usageLabel = ShimmerLabel(frame: .zero)
 
@@ -31,6 +34,8 @@ final class StatusView: NSView {
     private var activeAgents: [AgentSnapshot] = []
     private var usage: UsageInfo?
     private var usageChipWidth: CGFloat = 0
+    private var memory: MemoryInfo?
+    private var memoryChipWidth: CGFloat = 0
     private var selectedIndex = 0
     private var pinned = false
     private var pinnedSince: Date?
@@ -54,6 +59,11 @@ final class StatusView: NSView {
         addSubview(iconView)
         addSubview(label)
 
+        memoryLabel.setFont(size: 12, weight: .semibold)
+        memoryLabel.setShimmering(false)
+        memoryLabel.isHidden = true
+        addSubview(memoryLabel)
+
         usageLabel.setFont(size: 12, weight: .semibold)
         usageLabel.setShimmering(false)
         usageLabel.isHidden = true
@@ -73,13 +83,15 @@ final class StatusView: NSView {
         if presentationWidth <= 1 {
             iconView.isHidden = true
             label.isHidden = true
+            memoryLabel.isHidden = true
             usageLabel.isHidden = true
             return
         }
         if compactWhenIdle {
-            // Compact idle presentation is a bare logo; the quota chip is
-            // part of the full-width layout only.
+            // Compact idle presentation is a bare logo; the right-side chips
+            // are part of the full-width layout only.
             label.isHidden = true
+            memoryLabel.isHidden = true
             usageLabel.isHidden = true
             iconView.isHidden = false
             iconView.frame = NSRect(
@@ -93,11 +105,14 @@ final class StatusView: NSView {
         label.isHidden = false
         iconView.isHidden = false
 
-        // The quota chip owns the right edge; the agent group stays centred
-        // in whatever space is left.
-        let chipWidth = usageLabel.isHidden ? 0 : usageChipWidth
-        let chipGap: CGFloat = chipWidth > 0 ? 12 : 0
-        let contentWidth = max(bounds.width - chipWidth - chipGap, 80)
+        // Right-side info group: [memory] [usage]. The agent group stays
+        // centred in whatever space is left of it.
+        let usageWidth = usageLabel.isHidden ? 0 : usageChipWidth
+        let memoryWidth = memoryLabel.isHidden ? 0 : memoryChipWidth
+        let usageGap: CGFloat = usageWidth > 0 ? 12 : 0
+        let memoryGap: CGFloat = memoryWidth > 0 ? 12 : 0
+        let rightGroupWidth = memoryWidth + memoryGap + usageWidth
+        let contentWidth = max(bounds.width - rightGroupWidth - usageGap, 80)
 
         let maxTextWidth = max(contentWidth - 56, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
@@ -106,11 +121,19 @@ final class StatusView: NSView {
         iconView.frame = NSRect(x: groupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.frame = NSRect(x: groupX + 24, y: 0, width: textWidth, height: bounds.height)
 
-        if chipWidth > 0 {
-            usageLabel.frame = NSRect(
-                x: bounds.width - chipWidth,
+        if memoryWidth > 0 {
+            memoryLabel.frame = NSRect(
+                x: bounds.width - usageWidth - (usageWidth > 0 ? usageGap : 0) - memoryWidth,
                 y: 0,
-                width: chipWidth,
+                width: memoryWidth,
+                height: bounds.height
+            )
+        }
+        if usageWidth > 0 {
+            usageLabel.frame = NSRect(
+                x: bounds.width - usageWidth,
+                y: 0,
+                width: usageWidth,
                 height: bounds.height
             )
         }
@@ -136,12 +159,14 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    func apply(agents: [AgentSnapshot], usage: UsageInfo? = nil) {
+    func apply(agents: [AgentSnapshot], usage: UsageInfo? = nil, memory: MemoryInfo? = nil) {
         self.agents = agents
         self.usage = usage
+        self.memory = memory
         activeAgents = agents.filter { $0.lastActive > 0 }
 
         refreshUsage()
+        refreshMemory()
 
         if let pinnedSince = pinnedSince, Date().timeIntervalSince(pinnedSince) > 300 {
             pinned = false
@@ -207,6 +232,42 @@ final class StatusView: NSView {
         case 50...:
             return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1)
         case 20..<50:
+            return NSColor.systemYellow
+        default:
+            return NSColor.systemRed
+        }
+    }
+
+    // MARK: Memory chip
+
+    /// Renders the system RAM chip just left of the quota chip:
+    /// "12.4G · 68%". Green below 70% used, amber 70–89%, red at 90%+.
+    private func refreshMemory() {
+        guard AgentPrefs.memoryEnabled, let memory = memory, memory.totalBytes > 0 else {
+            memoryChipWidth = 0
+            memoryLabel.isHidden = true
+            needsLayout = true
+            return
+        }
+
+        memoryLabel.text = Self.formatMemory(memory)
+        memoryLabel.textColor = Self.memoryColor(memory)
+        memoryChipWidth = memoryLabel.measuredWidth
+        memoryLabel.isHidden = false
+        needsLayout = true
+    }
+
+    static func formatMemory(_ memory: MemoryInfo) -> String {
+        let gb = Double(memory.usedBytes) / 1_073_741_824.0
+        let used = gb < 100 ? String(format: "%.1fG", gb) : String(format: "%.0fG", gb)
+        return "\(used) · \(memory.usedPercent)%"
+    }
+
+    private static func memoryColor(_ memory: MemoryInfo) -> NSColor {
+        switch memory.usedPercent {
+        case ..<70:
+            return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1)
+        case 70..<90:
             return NSColor.systemYellow
         default:
             return NSColor.systemRed

@@ -55,11 +55,16 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     private let statusView: StatusView
     private let client = BridgeClient()
     private let stateWatcher = StateFileWatcher()
-    /// Slow HTTP fallback while the state file is unavailable (bridge not
-    /// started yet, or an older bridge that does not publish one).
+    /// Slow HTTP safety net. Stays armed even after the file path works:
+    /// if the DispatchSource ever dies, the bar must not freeze on a stale
+    /// Thinking label.
     private var fallbackTimer: Timer?
     private var isFetching = false
     private var receivedFromFile = false
+    private var lastFileUpdate: Date?
+
+    /// File delivery is trusted for this long; after that HTTP may override.
+    private let fileFreshWindow: TimeInterval = 15
 
     override public required init() {
         statusView = StatusView(frame: NSRect(x: 0, y: 0, width: StatusView.preferredWidth, height: 30))
@@ -71,8 +76,8 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
         stateWatcher.onState = { [weak self] state in
             guard let self else { return }
             self.receivedFromFile = true
-            self.stopFallback()
-            self.statusView.apply(agents: state.agents, usage: state.usage)
+            self.lastFileUpdate = Date()
+            self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory)
         }
         AgentTouchBarWidget.shared = self
     }
@@ -115,16 +120,21 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     }
 
     private func fetchOverHTTP() {
-        // Once the file path is delivering, HTTP is only a health net; skip
-        // while a request is already in flight.
         guard !isFetching else { return }
         isFetching = true
         client.fetchState { [weak self] state in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.isFetching = false
-                if let state, !self.receivedFromFile {
-                    self.statusView.apply(agents: state.agents, usage: state.usage)
+                guard let state else { return }
+                // Prefer the file path while it is delivering; fall back to
+                // HTTP when it has gone quiet so a dead watcher cannot pin
+                // an old Thinking label forever.
+                let fileFresh = self.lastFileUpdate.map {
+                    Date().timeIntervalSince($0) < self.fileFreshWindow
+                } ?? false
+                if !self.receivedFromFile || !fileFresh {
+                    self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory)
                 }
             }
         }

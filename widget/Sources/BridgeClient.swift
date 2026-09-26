@@ -72,6 +72,14 @@ enum AgentPrefs {
         return defaults.bool(forKey: "usageEnabled")
     }
 
+    /// Shows the system RAM chip left of the quota chip. Defaults on;
+    /// set `memoryEnabled` to false in the com.touchbar.agentstatus domain
+    /// to hide it.
+    static var memoryEnabled: Bool {
+        if defaults.object(forKey: "memoryEnabled") == nil { return true }
+        return defaults.bool(forKey: "memoryEnabled")
+    }
+
     /// always: full ready state, compact: 36pt logo while idle,
     /// active: near-hidden 18pt anchor while idle (keeps Pock expandable).
     static var visibilityMode: String {

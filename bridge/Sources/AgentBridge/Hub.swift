@@ -208,6 +208,10 @@ final class AgentHub: @unchecked Sendable {
             .filter { isEnabled($0.agent) }
             .map { AgentReducer.project($0, now: now) }
             .sorted { $0.lastActive > $1.lastActive }
-        return BridgeState(agents: agents, usage: usageMonitor.snapshot())
+        return BridgeState(
+            agents: agents,
+            usage: usageMonitor.snapshot(),
+            memory: MemoryMonitor.snapshot()
+        )
     }
 }
