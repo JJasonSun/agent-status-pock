@@ -9,7 +9,7 @@ if [[ ! -d "$ROOT/AgentTouchBar.pock" && -d "$ROOT/../AgentTouchBar.pock" ]]; th
     ROOT="$(cd "$ROOT/.." && pwd)"
 fi
 INSTALL_DIR="$HOME/.agentbridge"
-HOOK_PATH="$INSTALL_DIR/hooks/agentbridge-hook.py"
+HOOK_PATH="$INSTALL_DIR/bin/agentbridge-hook"
 
 die() {
     echo "Error: $*" >&2
@@ -22,14 +22,16 @@ MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 command -v python3 >/dev/null 2>&1 || die "Python 3 is required."
 command -v curl >/dev/null 2>&1 || die "curl is required to verify AgentBridge."
 [[ -x "$ROOT/bin/agentbridge" ]] || die "The release is missing bin/agentbridge."
+[[ -x "$ROOT/bin/agentbridge-hook" ]] || die "The release is missing bin/agentbridge-hook."
 [[ -d "$ROOT/AgentTouchBar.pock" ]] || die "The release is missing AgentTouchBar.pock."
 
 echo "==> Installing bridge to $INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/hooks" "$INSTALL_DIR/logs"
+mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/logs"
 cp "$ROOT/bin/agentbridge" "$INSTALL_DIR/bin/agentbridge"
-cp "$ROOT/hooks/agentbridge-hook.py" "$HOOK_PATH"
+cp "$ROOT/bin/agentbridge-hook" "$HOOK_PATH"
 cp "$ROOT/uninstall.sh" "$INSTALL_DIR/uninstall.sh"
 chmod +x "$HOOK_PATH" "$INSTALL_DIR/bin/agentbridge" "$INSTALL_DIR/uninstall.sh"
+rm -f "$INSTALL_DIR/hooks/agentbridge-hook.py"
 
 echo "==> Installing LaunchAgent"
 mkdir -p "$HOME/Library/LaunchAgents"

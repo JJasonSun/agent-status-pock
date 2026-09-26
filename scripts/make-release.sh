@@ -23,10 +23,12 @@ echo "==> Staging release bundle"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/bin" "$STAGE/hooks/claude" "$STAGE/hooks/codex" "$STAGE/plugin-opencode"
 
-cp "$ROOT/bridge/.build/out/Products/Release/AgentBridge" "$STAGE/bin/agentbridge"
+cp "$ROOT/bridge/.build/apple/Products/Release/AgentBridge" "$STAGE/bin/agentbridge"
 chmod +x "$STAGE/bin/agentbridge"
 
-cp "$ROOT/hooks/agentbridge-hook.py" "$STAGE/hooks/"
+cp "$ROOT/bridge/.build/apple/Products/Release/AgentBridgeHook" "$STAGE/bin/agentbridge-hook"
+chmod +x "$STAGE/bin/agentbridge-hook"
+
 cp "$ROOT/hooks/claude/settings.hooks.json" "$STAGE/hooks/claude/"
 cp "$ROOT/hooks/codex/hooks.json.template" "$STAGE/hooks/codex/"
 cp "$ROOT/plugin-opencode/agentbridge.js" "$STAGE/plugin-opencode/"
