@@ -3,3 +3,6 @@
 widget/dist/
 *.log
 .release/
+
+## Swift coverage artifacts
+*.profraw
