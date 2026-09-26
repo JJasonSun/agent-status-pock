@@ -76,8 +76,12 @@ def main():
             })
     elif event == "MessageDisplay":
         fire_and_forget({"agent": agent, "event": "answering"})
-    elif event in ("PostToolUse", "PostToolUseFailure", "UserPromptSubmit",
-                   "SubagentStart", "SubagentStop", "PreCompact", "PostCompact"):
+    elif event in ("PostToolUse", "PostToolUseFailure"):
+        # Protocol reference only — the live Swift hook is authoritative.
+        fire_and_forget({"agent": agent, "event": "tool_done"})
+    elif event == "UserPromptSubmit":
+        fire_and_forget({"agent": agent, "event": "prompt"})
+    elif event in ("SubagentStart", "SubagentStop", "PreCompact", "PostCompact"):
         fire_and_forget({"agent": agent, "event": "thinking"})
     elif event == "SessionStart":
         fire_and_forget({"agent": agent, "event": "session_start"})

@@ -19,6 +19,17 @@ final class AgentHub: @unchecked Sendable {
     private var lastEventAt: [AgentID: Double] = [:]
     private var labelSetAt: [AgentID: Double] = [:]
     private var heldEvent: [AgentID: HeldEvent] = [:]
+    /// Open tool calls per agent. PostToolUse only settles the bar when this
+    /// hits zero, so parallel tools stay on the working label.
+    private var toolsInFlight: [AgentID: Int] = [:]
+    /// When each agent last saw a tool_start — used to resync the counter.
+    private var lastToolStartAt: [AgentID: Double] = [:]
+
+    /// Starts within this window count as a parallel burst and increment
+    /// the in-flight counter. A later start is treated as sequential and
+    /// resets the counter to 1, so a missing PostToolUse cannot pin it
+    /// positive forever (Codex fires far fewer PostToolUse than PreToolUse).
+    static let parallelStartWindow: TimeInterval = 0.25
 
     private struct HeldEvent {
         let event: String
@@ -94,6 +105,31 @@ final class AgentHub: @unchecked Sendable {
             return
         }
         lastEventAt[agent] = eventTime
+
+        // Track in-flight tools so a single PostToolUse from a parallel
+        // batch cannot flip the bar to Thinking while siblings still run.
+        // Sequential starts resync the counter: Codex often omits
+        // PostToolUse, and an ever-growing count would discard every later
+        // tool_done until Stop — leaving a stale "Running <old command>".
+        if event == "tool_start" {
+            toolsInFlight[agent] = AgentReducer.toolsInFlightAfterStart(
+                current: toolsInFlight[agent] ?? 0,
+                lastStartAt: lastToolStartAt[agent],
+                now: eventTime,
+                parallelWindow: Self.parallelStartWindow
+            )
+            lastToolStartAt[agent] = eventTime
+        } else if event == "tool_done" {
+            let remaining = max(0, (toolsInFlight[agent] ?? 0) - 1)
+            toolsInFlight[agent] = remaining
+            if remaining > 0 {
+                lock.unlock()
+                log("[\(agent.rawValue)] tool_done while \(remaining) still in flight")
+                return
+            }
+        } else if event == "stop" || event == "session_end" {
+            toolsInFlight[agent] = 0
+        }
 
         // Display dwell: keep an active tool state visible for at least
         // `toolDisplayDwell` before a quieter state replaces it, so fast

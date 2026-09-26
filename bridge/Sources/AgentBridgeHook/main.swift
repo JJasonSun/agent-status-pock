@@ -63,8 +63,23 @@ func mapEvent(
     case "MessageDisplay":
         return ("answering", nil, nil)
 
-    case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit",
-         "SubagentStart", "SubagentStop", "PreCompact", "PostCompact":
+    // A finished tool is not the same as "thinking": the hub uses `tool_done`
+    // to drop its in-flight count and only then settle on Thinking. Mapping
+    // PostToolUse straight to thinking made parallel tools look idle while
+    // siblings were still running.
+    case "PostToolUse", "PostToolUseFailure":
+        return ("tool_done", nil, nil)
+
+    // User prompt starts a new turn — must be able to wake the bar after Stop.
+    case "UserPromptSubmit":
+        return ("prompt", nil, nil)
+
+    case "SubagentStart", "PreCompact", "PostCompact":
+        return ("thinking", nil, nil)
+
+    // Late SubagentStop after Stop must not re-light a settled bar; the
+    // reducer ignores thinking once the agent is ready/idle/responseReady.
+    case "SubagentStop":
         return ("thinking", nil, nil)
 
     case "SessionStart":

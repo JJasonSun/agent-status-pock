@@ -22,13 +22,36 @@ public enum AgentReducer {
 
     /// Quiet events may be deferred while a tool label is still dwelling.
     public static func isQuietTransition(_ event: String) -> Bool {
-        ["thinking", "answering", "stop", "session_end", "answer_done", "ready", "idle", "notification"]
+        ["thinking", "tool_done", "answering", "stop", "session_end", "answer_done", "ready", "idle", "notification"]
             .contains(event)
+    }
+
+    /// Starts within `parallelWindow` of each other form a parallel burst
+    /// and increment the in-flight counter. A later sequential start resets
+    /// it to 1, so a missing PostToolUse cannot pin the counter positive
+    /// (Codex emits far fewer PostToolUse than PreToolUse).
+    public static func toolsInFlightAfterStart(
+        current: Int,
+        lastStartAt: TimeInterval?,
+        now: TimeInterval,
+        parallelWindow: TimeInterval = 0.25
+    ) -> Int {
+        if let last = lastStartAt, now - last < parallelWindow {
+            return current + 1
+        }
+        return 1
     }
 
     /// Events that must not clear a sticky needs-input prompt.
     public static func isIgnoredWhileNeedsInput(_ event: String) -> Bool {
-        ["thinking", "notification", "connected"].contains(event)
+        ["thinking", "tool_done", "notification", "connected"].contains(event)
+    }
+
+    /// Late PostToolUse / SubagentStop chatter after a turn ended. These
+    /// must not wake a settled agent; only prompt / tool_start / session /
+    /// needs_input / answering may.
+    private static func isSettled(_ status: AgentStatus) -> Bool {
+        status == .ready || status == .idle || status == .responseReady
     }
 
     /// Fold one hook event into a snapshot. `at` is the wall-clock moment
@@ -42,15 +65,24 @@ public enum AgentReducer {
         at now: TimeInterval
     ) -> AgentSnapshot {
         var status = current
-        status.lastActive = now
 
         // Keep needsInput sticky: while a question is on the Touch Bar,
         // thinking/notification events must not overwrite it. Only a real
         // state change (tool_start, answering, stop, ready, session_start,
         // or a new needs_input) clears it.
         if status.status == .needsInput, isIgnoredWhileNeedsInput(event) {
+            status.lastActive = now
             return status
         }
+
+        // A settled bar stays settled: thinking/tool_done after Stop is
+        // leftover hook chatter, not a new turn. Do not bump lastActive
+        // either, or a quiet Codex app would keep the strip "live".
+        if event == "thinking" || event == "tool_done", isSettled(status.status) {
+            return status
+        }
+
+        status.lastActive = now
 
         switch event {
         case "session_start":
@@ -60,11 +92,20 @@ public enum AgentReducer {
             status.detail = nil
             status.transientUntil = now + connectedTransient
 
-        case "thinking":
+        case "prompt", "thinking":
             status.status = .thinking
             status.label = "Thinking"
             status.tool = nil
             status.detail = detail
+            status.transientUntil = nil
+
+        // Hub only forwards tool_done when no sibling tools are still in
+        // flight; treat it like the post-tool breath.
+        case "tool_done":
+            status.status = .thinking
+            status.label = "Thinking"
+            status.tool = nil
+            status.detail = nil
             status.transientUntil = nil
 
         case "answering":

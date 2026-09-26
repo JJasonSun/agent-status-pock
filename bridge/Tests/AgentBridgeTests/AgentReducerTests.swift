@@ -54,7 +54,7 @@ final class AgentReducerTests: XCTestCase {
 
     func testNeedsInputIsStickyAgainstThinkingAndNotification() {
         let asking = snapshot(status: .needsInput, label: "Pick a file")
-        for event in ["thinking", "notification", "connected"] {
+        for event in ["thinking", "tool_done", "notification", "connected"] {
             let next = AgentReducer.reduce(
                 into: asking, event: event, tool: nil, detail: "ignored", at: 10
             )
@@ -62,6 +62,45 @@ final class AgentReducerTests: XCTestCase {
             XCTAssertEqual(next.label, "Pick a file")
             XCTAssertEqual(next.lastActive, 10)
         }
+    }
+
+    func testThinkingDoesNotWakeSettledAgent() {
+        for status in [AgentStatus.ready, .idle, .responseReady] {
+            let before = snapshot(status: status, label: "Codex is ready", lastActive: 100)
+            for event in ["thinking", "tool_done"] {
+                let next = AgentReducer.reduce(
+                    into: before, event: event, tool: nil, detail: nil, at: 120
+                )
+                XCTAssertEqual(next.status, status, "settled \(status) must ignore \(event)")
+                XCTAssertEqual(next.lastActive, 100, "ignored \(event) must not refresh lastActive")
+            }
+        }
+    }
+
+    func testPromptWakesReadyToThinking() {
+        let next = AgentReducer.reduce(
+            into: snapshot(status: .ready, label: "Codex is ready"),
+            event: "prompt",
+            tool: nil,
+            detail: nil,
+            at: 50
+        )
+        XCTAssertEqual(next.status, .thinking)
+        XCTAssertEqual(next.label, "Thinking")
+        XCTAssertEqual(next.lastActive, 50)
+    }
+
+    func testToolDoneAfterWorkingBecomesThinking() {
+        let next = AgentReducer.reduce(
+            into: snapshot(status: .working, label: "Running", lastActive: 10),
+            event: "tool_done",
+            tool: nil,
+            detail: nil,
+            at: 20
+        )
+        XCTAssertEqual(next.status, .thinking)
+        XCTAssertEqual(next.label, "Thinking")
+        XCTAssertEqual(next.lastActive, 20)
     }
 
     func testNeedsInputIsClearedByToolStart() {
@@ -195,9 +234,11 @@ final class AgentReducerTests: XCTestCase {
 
     func testQuietTransitions() {
         XCTAssertTrue(AgentReducer.isQuietTransition("thinking"))
+        XCTAssertTrue(AgentReducer.isQuietTransition("tool_done"))
         XCTAssertTrue(AgentReducer.isQuietTransition("stop"))
         XCTAssertTrue(AgentReducer.isQuietTransition("ready"))
         XCTAssertFalse(AgentReducer.isQuietTransition("tool_start"))
+        XCTAssertFalse(AgentReducer.isQuietTransition("prompt"))
         XCTAssertFalse(AgentReducer.isQuietTransition("needs_input"))
         XCTAssertFalse(AgentReducer.isQuietTransition("session_start"))
     }
@@ -214,5 +255,35 @@ final class AgentReducerTests: XCTestCase {
         XCTAssertTrue(AgentStatus.responseReady.isAttention)
         XCTAssertFalse(AgentStatus.ready.isAttention)
         XCTAssertFalse(AgentStatus.idle.isAttention)
+    }
+
+    // MARK: - tools in flight
+
+    func testFirstToolStartResetsToOne() {
+        XCTAssertEqual(AgentReducer.toolsInFlightAfterStart(current: 0, lastStartAt: nil, now: 100), 1)
+        // Stale positive count from a missed PostToolUse must not grow forever.
+        XCTAssertEqual(AgentReducer.toolsInFlightAfterStart(current: 40, lastStartAt: 50, now: 100), 1)
+    }
+
+    func testParallelBurstWithinWindowIncrements() {
+        XCTAssertEqual(
+            AgentReducer.toolsInFlightAfterStart(current: 1, lastStartAt: 100, now: 100.1),
+            2
+        )
+        XCTAssertEqual(
+            AgentReducer.toolsInFlightAfterStart(current: 2, lastStartAt: 100.1, now: 100.2),
+            3
+        )
+    }
+
+    func testSequentialStartAfterWindowResyncsToOne() {
+        XCTAssertEqual(
+            AgentReducer.toolsInFlightAfterStart(current: 5, lastStartAt: 100, now: 102),
+            1
+        )
+        XCTAssertEqual(
+            AgentReducer.toolsInFlightAfterStart(current: 1, lastStartAt: 100, now: 100.25),
+            1
+        )
     }
 }
