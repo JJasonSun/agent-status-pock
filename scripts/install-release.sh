@@ -77,14 +77,27 @@ settings = {}
 if os.path.exists(settings_path):
     backup = settings_path + ".bak-agentbridge"
     if not os.path.exists(backup):
-        shutil.copy2(settings_path, backup)
+        try:
+            shutil.copy2(settings_path, backup)
+        except OSError as err:
+            print("    warning: could not back up %s (%s); continuing without a backup" % (settings_path, err))
     try:
         with open(settings_path) as f:
             settings = json.load(f)
-    except (ValueError, OSError):
-        print("    warning: could not parse %s; starting from an empty file" % settings_path)
+    except ValueError as err:
+        print("    warning: could not parse %s (%s); starting from an empty file" % (settings_path, err))
         settings = {}
-hooks = settings.setdefault("hooks", {})
+    except OSError as err:
+        print("    warning: could not read %s (%s); starting from an empty file" % (settings_path, err))
+        settings = {}
+    if not isinstance(settings, dict):
+        print("    warning: %s is not a JSON object; starting from an empty file" % settings_path)
+        settings = {}
+if not isinstance(settings.get("hooks"), dict):
+    if settings:
+        print("    warning: 'hooks' in %s is not an object; replacing it" % settings_path)
+    settings["hooks"] = {}
+hooks = settings["hooks"]
 for event, entries in snippet["hooks"].items():
     hooks.setdefault(event, [])
     for entry in entries:
@@ -108,15 +121,29 @@ with open(template_path) as f:
     template = json.loads(f.read().replace("@@HOOK_PATH@@", hook_path))
 hooks = {}
 if os.path.exists(path):
+    backup = path + ".bak-agentbridge"
+    if not os.path.exists(backup):
+        try:
+            shutil.copy2(path, backup)
+        except OSError as err:
+            print("    warning: could not back up %s (%s); continuing without a backup" % (path, err))
     try:
         with open(path) as f:
             hooks = json.load(f)
-    except (ValueError, OSError):
-        if not os.path.exists(path + ".bak-agentbridge"):
-            shutil.copy2(path, path + ".bak-agentbridge")
-        print("    warning: could not parse %s; starting from an empty file" % path)
+    except ValueError as err:
+        print("    warning: could not parse %s (%s); starting from an empty file" % (path, err))
         hooks = {}
-events = hooks.setdefault("hooks", {})
+    except OSError as err:
+        print("    warning: could not read %s (%s); starting from an empty file" % (path, err))
+        hooks = {}
+    if not isinstance(hooks, dict):
+        print("    warning: %s is not a JSON object; starting from an empty file" % path)
+        hooks = {}
+if not isinstance(hooks.get("hooks"), dict):
+    if hooks:
+        print("    warning: 'hooks' in %s is not an object; replacing it" % path)
+    hooks["hooks"] = {}
+events = hooks["hooks"]
 for event, entries in template["hooks"].items():
     events.setdefault(event, [])
     events[event] = [entry for entry in events[event]
