@@ -104,38 +104,8 @@ echo "==> Building and installing Pock widget"
 
 echo "==> Installing Claude Code hooks"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
-python3 - "$CLAUDE_SETTINGS" "$ROOT/hooks/claude/settings.hooks.json" <<'PYEOF'
-import json, os, shutil, sys
-settings_path, snippet_path = sys.argv[1], sys.argv[2]
-with open(snippet_path) as f:
-    snippet = json.load(f)
-settings = {}
-if os.path.exists(settings_path):
-    with open(settings_path) as f:
-        settings = json.load(f)
-    backup = settings_path + ".bak-agentbridge"
-    if not os.path.exists(backup):
-        shutil.copy2(settings_path, backup)
-hooks = settings.setdefault("hooks", {})
-for event, entries in snippet["hooks"].items():
-    hooks.setdefault(event, [])
-    # Drop the old Python hook path so a reinstall does not leave both
-    # the .py and the Swift binary registered for the same event.
-    hooks[event] = [
-        entry for entry in hooks[event]
-        if "agentbridge-hook.py" not in json.dumps(entry)
-    ]
-    for entry in entries:
-        if entry not in hooks[event]:
-            hooks[event].append(entry)
-os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-temp_path = settings_path + ".tmp-agentbridge"
-with open(temp_path, "w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
-os.replace(temp_path, settings_path)
-print("    merged into ~/.claude/settings.json")
-PYEOF
+python3 "$ROOT/scripts/merge_agent_hooks.py" claude \
+    "$CLAUDE_SETTINGS" "$ROOT/hooks/claude/settings.hooks.json"
 
 echo "==> Installing Codex hooks"
 # Prefer a single representation: if config.toml already carries
@@ -146,61 +116,13 @@ if [[ -f "$CODEX_CONFIG" ]] && grep -q "agentbridge-hook" "$CODEX_CONFIG" 2>/dev
     echo "    ~/.codex/config.toml already has AgentBridge hooks; skipping hooks.json"
 else
 CODEX_HOOKS="$HOME/.codex/hooks.json"
-python3 - "$CODEX_HOOKS" "$ROOT/hooks/codex/hooks.json.template" "$HOOK_PATH" <<'PYEOF'
-import json, os, sys
-path, template_path, hook_path = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(template_path) as f:
-    template = json.loads(f.read().replace("@@HOOK_PATH@@", hook_path))
-hooks = {}
-if os.path.exists(path):
-    with open(path) as f:
-        hooks = json.load(f)
-events = hooks.setdefault("hooks", {})
-for event, entries in template["hooks"].items():
-    events.setdefault(event, [])
-    # Replace older AgentBridge entries so stale wildcard matchers/args do
-    # not remain active alongside the corrected command.
-    events[event] = [entry for entry in events[event]
-                     if hook_path not in json.dumps(entry)]
-    for entry in entries:
-        if entry not in events[event]:
-            events[event].append(entry)
-os.makedirs(os.path.dirname(path), exist_ok=True)
-temp_path = path + ".tmp-agentbridge"
-with open(temp_path, "w") as f:
-    json.dump(hooks, f, indent=2)
-    f.write("\n")
-os.replace(temp_path, path)
-print("    wrote ~/.codex/hooks.json (run /hooks in Codex to trust the new hooks)")
-PYEOF
+python3 "$ROOT/scripts/merge_agent_hooks.py" codex \
+    "$CODEX_HOOKS" "$ROOT/hooks/codex/hooks.json.template" "$HOOK_PATH"
 fi
 
 # Newer Codex also stores hooks in config.toml. Rewrite any retired Python
 # hook commands so a reinstall does not leave a broken path behind.
-python3 - "$HOOK_PATH" <<'PYEOF'
-import os, sys
-from pathlib import Path
-hook_path = sys.argv[1]
-cfg = Path(os.path.expanduser("~/.codex/config.toml"))
-if not cfg.exists():
-    sys.exit(0)
-text = cfg.read_text()
-replacements = [
-    ("/usr/bin/python3 $HOME/.agentbridge/hooks/agentbridge-hook.py codex", hook_path + " codex"),
-    ("/usr/bin/python3 " + os.path.expanduser("~/.agentbridge/hooks/agentbridge-hook.py") + " codex", hook_path + " codex"),
-    (os.path.expanduser("~/.agentbridge/hooks/agentbridge-hook.py") + " codex", hook_path + " codex"),
-]
-changed = 0
-for old, new in replacements:
-    if old in text:
-        changed += text.count(old)
-        text = text.replace(old, new)
-if changed:
-    cfg.write_text(text)
-    print(f"    rewrote {changed} hook command(s) in ~/.codex/config.toml")
-else:
-    print("    ~/.codex/config.toml has no retired agentbridge-hook.py commands")
-PYEOF
+python3 "$ROOT/scripts/merge_agent_hooks.py" codex-config-toml "$CODEX_CONFIG" "$HOOK_PATH"
 
 echo "==> Installing opencode plugin"
 mkdir -p "$HOME/.config/opencode/plugins"
