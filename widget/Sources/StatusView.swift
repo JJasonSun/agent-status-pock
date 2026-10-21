@@ -40,8 +40,8 @@ final class StatusView: NSView {
     private var usage: UsageInfo?
     private var memory: MemoryInfo?
     private let memorySlotWidth = chipSlotWidth("99.9G · 100%")
-    private let usageSlotWidth = chipSlotWidth("日100%·23时")
-    private let agentGroupX: CGFloat = 36
+    private let usageSlotWidth = chipSlotWidth("周100%·168h")
+    private let agentGroupX: CGFloat = 24
     private var selectedIndex = 0
     private var pinned = false
     private var pinnedSince: Date?
@@ -121,7 +121,7 @@ final class StatusView: NSView {
         let rightGroupWidth = memoryWidth + memoryGap + usageWidth
         let contentWidth = max(bounds.width - rightGroupWidth - usageGap, 80)
 
-        let maxTextWidth = max(contentWidth - agentGroupX - 24, 60)
+        let maxTextWidth = max(contentWidth - agentGroupX - 20, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
         iconView.frame = NSRect(x: agentGroupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.frame = NSRect(x: agentGroupX + 24, y: 0, width: textWidth, height: bounds.height)
@@ -241,13 +241,10 @@ final class StatusView: NSView {
         guard !usage.unlimited, let resetsAt = usage.resetsAt else { return "" }
         let seconds = resetsAt - now.timeIntervalSince1970
         guard seconds > 0 else { return "" }
-        if seconds >= 86_400 {
-            return "·\(Int(seconds / 86_400))天"
-        }
         if seconds >= 3_600 {
-            return "·\(Int(seconds / 3_600))时"
+            return "·\(Int(seconds / 3_600))h"
         }
-        return "·\(max(1, Int(seconds / 60)))分"
+        return "·\(max(1, Int(seconds / 60)))m"
     }
 
     private static func usageColor(_ usage: UsageInfo) -> NSColor {

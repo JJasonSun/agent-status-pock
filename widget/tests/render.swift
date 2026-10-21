@@ -265,10 +265,11 @@ struct RenderTest {
         precondition(usageLowLit > 60, "low-headroom quota chip missing")
         precondition(usageNoneLit < usageLit / 3, "right edge occupied without a reading")
 
-        // Memory chip occupies a strip left of the quota chip (~28–42%).
-        let memLit = stripLit("render-memory.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
-        let memOnlyLit = stripLit("render-memory-only.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
-        let memNoneLit = stripLit("render-memory-none.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
+        // Memory chip: with usage present it sits in the 55–76% slot;
+        // with usage hidden it moves to the right edge.
+        let memLit = stripLit("render-memory.png", contentWidth: StatusView.preferredWidth, startFraction: 0.55, endFraction: 0.76)
+        let memOnlyLit = stripLit("render-memory-only.png", contentWidth: StatusView.preferredWidth, startFraction: 0.80, endFraction: 1.0)
+        let memNoneLit = stripLit("render-memory-none.png", contentWidth: StatusView.preferredWidth, startFraction: 0.55, endFraction: 0.76)
         precondition(memLit > 40, "memory chip missing beside the quota chip")
         precondition(memOnlyLit > 40, "memory chip missing when quota is absent")
         precondition(memNoneLit < memLit / 3, "memory strip occupied without a reading")
