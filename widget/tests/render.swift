@@ -112,12 +112,39 @@ func memory(usedGB: Double, percent: Int) -> MemoryInfo {
     )
 }
 
+func assertStableLayout() {
+    let view = StatusView(frame: NSRect(x: 0, y: 0, width: StatusView.preferredWidth, height: 30))
+    let states: [([AgentSnapshot], UsageInfo, MemoryInfo)] = [
+        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 20, label: "周", stale: false), memory(usedGB: 12.4, percent: 68)),
+        ([agent(.claude, "Claude", "sparkles", "D97757", .thinking, "Thinking", 100)], quota(remaining: 20, label: "周", stale: false), memory(usedGB: 12.4, percent: 68)),
+        ([agent(.claude, "Claude", "sparkles", "D97757", .needsInput, "Agent is asking a question", 100)], quota(remaining: 100, label: "周", stale: false), memory(usedGB: 30.1, percent: 92)),
+        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 8, label: "周", stale: true), memory(usedGB: 9.9, percent: 9)),
+    ]
+    var baseline: [CGFloat]?
+    for (agents, usage, memory) in states {
+        view.apply(agents: agents, usage: usage, memory: memory)
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+        let icon = view.subviews.compactMap { $0 as? NSImageView }.first!
+        let labels = view.subviews.compactMap { $0 as? ShimmerLabel }
+        let frames = [icon.frame.minX, labels[0].frame.minX, labels[1].frame.minX, labels[2].frame.minX]
+        if let baseline {
+            precondition(zip(frames, baseline).allSatisfy { abs($0 - $1) < 0.5 },
+                         "layout moved: \(frames) vs \(baseline)")
+        } else {
+            baseline = frames
+        }
+    }
+    print("layout stability: PASSED")
+}
+
 @main
 struct RenderTest {
     static func main() {
         guard dlopen(outDir.appendingPathComponent("lib/libPockKit.dylib").path, RTLD_NOW) != nil else {
             fatalError(String(cString: dlerror()))
         }
+        assertStableLayout()
         let statusView = StatusView(frame: NSRect(x: 0, y: 0, width: StatusView.preferredWidth, height: 30))
 
         // Working (shimmering) — Claude editing, Codex idle.

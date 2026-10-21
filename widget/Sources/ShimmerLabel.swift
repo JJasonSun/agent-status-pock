@@ -34,7 +34,8 @@ final class ShimmerLabel: NSView {
             self.layer?.addSublayer(layer)
         }
 
-        baseLayer.opacity = 0.55
+        baseLayer.opacity = 1.0
+        brightLayer.isHidden = true
 
         // Soft-edged band with a full-brightness plateau (~20% of width),
         // mirroring the reference shimmer: transparent → ramp up → white
@@ -47,7 +48,7 @@ final class ShimmerLabel: NSView {
             NSColor.clear.cgColor,
             NSColor.clear.cgColor,
         ]
-        maskGradient.locations = [0.0, 0.30, 0.40, 0.60, 0.70, 1.0]
+        maskGradient.locations = [0.0, 0.20, 0.32, 0.68, 0.80, 1.0]
         maskGradient.startPoint = CGPoint(x: 0, y: 0.5)
         maskGradient.endPoint = CGPoint(x: 1, y: 0.5)
         maskGradient.anchorPoint = CGPoint(x: 0, y: 0.5)
@@ -88,6 +89,11 @@ final class ShimmerLabel: NSView {
             layer.fontSize = size
         }
         updateTextGeometry()
+    }
+
+    func setAlignment(_ alignment: CATextLayerAlignmentMode) {
+        baseLayer.alignmentMode = alignment
+        brightLayer.alignmentMode = alignment
     }
 
     var text: String = "" {
@@ -131,6 +137,8 @@ final class ShimmerLabel: NSView {
     }
 
     func setShimmering(_ shimmering: Bool) {
+        baseLayer.opacity = shimmering ? 0.70 : 1.0
+        brightLayer.isHidden = !shimmering
         guard shimmering != isShimmering else { return }
         isShimmering = shimmering
         if shimmering {

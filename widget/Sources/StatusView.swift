@@ -1,5 +1,10 @@
 import AppKit
 
+private func chipSlotWidth(_ text: String) -> CGFloat {
+    let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    return (text as NSString).size(withAttributes: [.font: font]).width + 6
+}
+
 /// Main widget view. Shows the live agent status with a shimmering label.
 /// Bounded width while active, can collapse when all enabled agents are idle.
 ///
@@ -33,9 +38,10 @@ final class StatusView: NSView {
     private var agents: [AgentSnapshot] = []
     private var activeAgents: [AgentSnapshot] = []
     private var usage: UsageInfo?
-    private var usageChipWidth: CGFloat = 0
     private var memory: MemoryInfo?
-    private var memoryChipWidth: CGFloat = 0
+    private let memorySlotWidth = chipSlotWidth("999.9G · 100%")
+    private let usageSlotWidth = chipSlotWidth("周100%")
+    private let agentGroupX: CGFloat = 36
     private var selectedIndex = 0
     private var pinned = false
     private var pinnedSince: Date?
@@ -65,6 +71,7 @@ final class StatusView: NSView {
         addSubview(memoryLabel)
 
         usageLabel.setFont(size: 12, weight: .semibold)
+        usageLabel.setAlignment(.right)
         usageLabel.setShimmering(false)
         usageLabel.isHidden = true
         addSubview(usageLabel)
@@ -105,21 +112,19 @@ final class StatusView: NSView {
         label.isHidden = false
         iconView.isHidden = false
 
-        // Right-side info group: [memory] [usage]. The agent group stays
-        // centred in whatever space is left of it.
-        let usageWidth = usageLabel.isHidden ? 0 : usageChipWidth
-        let memoryWidth = memoryLabel.isHidden ? 0 : memoryChipWidth
+        // Right-side info group: [memory] [usage]. Fixed-width slots keep the
+        // agent group and both chips from shifting as their text changes.
+        let usageWidth = usageLabel.isHidden ? 0 : usageSlotWidth
+        let memoryWidth = memoryLabel.isHidden ? 0 : memorySlotWidth
         let usageGap: CGFloat = usageWidth > 0 ? 12 : 0
         let memoryGap: CGFloat = memoryWidth > 0 ? 12 : 0
         let rightGroupWidth = memoryWidth + memoryGap + usageWidth
         let contentWidth = max(bounds.width - rightGroupWidth - usageGap, 80)
 
-        let maxTextWidth = max(contentWidth - 56, 60)
+        let maxTextWidth = max(contentWidth - agentGroupX - 32, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
-        let groupWidth = 16 + 8 + textWidth
-        let groupX = max((contentWidth - groupWidth) / 2, 8)
-        iconView.frame = NSRect(x: groupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        label.frame = NSRect(x: groupX + 24, y: 0, width: textWidth, height: bounds.height)
+        iconView.frame = NSRect(x: agentGroupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        label.frame = NSRect(x: agentGroupX + 24, y: 0, width: textWidth, height: bounds.height)
 
         if memoryWidth > 0 {
             memoryLabel.frame = NSRect(
@@ -212,7 +217,6 @@ final class StatusView: NSView {
     /// (recorded rather than queried) is dimmed instead of re-labelled.
     private func refreshUsage() {
         guard AgentPrefs.usageEnabled, let usage = usage, usage.remainingPercent >= 0 else {
-            usageChipWidth = 0
             usageLabel.isHidden = true
             needsLayout = true
             return
@@ -220,8 +224,7 @@ final class StatusView: NSView {
 
         usageLabel.text = usage.unlimited ? "∞" : "\(usage.windowLabel)\(usage.remainingPercent)%"
         usageLabel.textColor = Self.usageColor(usage)
-        usageLabel.alphaValue = usage.stale ? 0.68 : 1
-        usageChipWidth = usageLabel.measuredWidth
+        usageLabel.alphaValue = usage.stale ? 0.85 : 1
         usageLabel.isHidden = false
         needsLayout = true
     }
@@ -244,7 +247,6 @@ final class StatusView: NSView {
     /// "12.4G · 68%". Green below 70% used, amber 70–89%, red at 90%+.
     private func refreshMemory() {
         guard AgentPrefs.memoryEnabled, let memory = memory, memory.totalBytes > 0 else {
-            memoryChipWidth = 0
             memoryLabel.isHidden = true
             needsLayout = true
             return
@@ -252,7 +254,6 @@ final class StatusView: NSView {
 
         memoryLabel.text = Self.formatMemory(memory)
         memoryLabel.textColor = Self.memoryColor(memory)
-        memoryChipWidth = memoryLabel.measuredWidth
         memoryLabel.isHidden = false
         needsLayout = true
     }
@@ -368,9 +369,9 @@ final class StatusView: NSView {
         case .none:
             iconView.layer?.opacity = 1
         case .pulse:
-            addAmbientAnimation(from: 0.55, to: 1.0, duration: 2.2)
+            addAmbientAnimation(from: 0.80, to: 1.0, duration: 2.2)
         case .breathe:
-            addAmbientAnimation(from: 0.35, to: 1.0, duration: 1.4)
+            addAmbientAnimation(from: 0.65, to: 1.0, duration: 1.4)
         }
     }
 
