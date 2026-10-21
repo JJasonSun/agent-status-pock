@@ -21,7 +21,6 @@ final class HTTPServer: @unchecked Sendable {
     private let hub: AgentHub
     private let port: UInt16
     private var listenFd: Int32 = -1
-    private var running = true
 
     init(hub: AgentHub, port: UInt16) {
         self.hub = hub
@@ -51,18 +50,13 @@ final class HTTPServer: @unchecked Sendable {
 
         print("[AgentBridge] listening on http://127.0.0.1:\(port)")
 
-        while running {
+        while true {
             let clientFd = accept(listenFd, nil, nil)
             guard clientFd >= 0 else { continue }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.handle(clientFd)
             }
         }
-    }
-
-    func stop() {
-        running = false
-        if listenFd >= 0 { close(listenFd); listenFd = -1 }
     }
 
     // MARK: Connection handling

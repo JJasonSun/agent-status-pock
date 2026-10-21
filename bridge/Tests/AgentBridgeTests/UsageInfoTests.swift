@@ -7,7 +7,6 @@ final class UsageInfoTests: XCTestCase {
         UsageInfo(
             remainingPercent: 20,
             usedPercent: 80,
-            windowLabel: "周",
             windowMinutes: 10080,
             resetsAt: resetsAt,
             planType: "pro",

@@ -1,4 +1,4 @@
-.PHONY: bridge widget test install uninstall
+.PHONY: bridge unit widget watcher-test installer-test test install uninstall
 
 bridge:
 	cd bridge && swift build -c release
@@ -8,10 +8,6 @@ unit:
 
 widget:
 	cd widget && ./build.sh
-
-# build.sh always emits AgentTouchBar.pock plus matching .pkarchive files.
-package: widget
-	@echo "Archives are built by widget/build.sh; see widget/dist/."
 
 watcher-test: widget
 	@cd widget && swiftc -parse-as-library -o dist/watcher-test tests/watcher.swift \

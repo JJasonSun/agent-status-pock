@@ -39,7 +39,6 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    private var agents: [AgentSnapshot] = []
     private var activeAgents: [AgentSnapshot] = []
     private var usage: UsageInfo?
     private var memory: MemoryInfo?
@@ -193,7 +192,6 @@ final class StatusView: NSView {
         memory: MemoryInfo? = nil,
         cpuPercent: Int? = nil
     ) {
-        self.agents = agents
         self.usage = usage
         self.memory = memory
         self.cpuPercent = cpuPercent

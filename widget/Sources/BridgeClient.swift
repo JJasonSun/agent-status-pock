@@ -40,7 +40,6 @@ final class BridgeClient {
 
 enum AgentPrefs {
     static let suiteName = "com.touchbar.agentstatus"
-    static let changedNotification = Notification.Name("AgentTouchBarPreferencesChanged")
 
     static var defaults: UserDefaults {
         return UserDefaults(suiteName: suiteName) ?? .standard
@@ -95,12 +94,6 @@ enum AgentPrefs {
     static var showOnlyWhileActive: Bool {
         if defaults.object(forKey: "showOnlyWhileActive") == nil { return false }
         return defaults.bool(forKey: "showOnlyWhileActive")
-    }
-
-    /// `hidden` returns the Touch Bar space to neighboring items; `icon`
-    /// keeps a compact 36pt neutral indicator while agents are idle.
-    static var idlePresentation: String {
-        return defaults.string(forKey: "idlePresentation") ?? "hidden"
     }
 }
 

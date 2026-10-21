@@ -89,12 +89,11 @@ func agent(_ a: AgentID, _ n: String, _ s: String, _ c: String, _ st: AgentStatu
     AgentSnapshot(agent: a, name: n, symbol: s, color: c, status: st, label: l, tool: nil, detail: nil, lastActive: la)
 }
 
-func quota(remaining: Int, label: String, stale: Bool,
+func quota(remaining: Int, stale: Bool,
            resetsAt: TimeInterval? = Date().timeIntervalSince1970 + 6 * 86_400) -> UsageInfo {
     UsageInfo(
         remainingPercent: remaining,
         usedPercent: 100 - remaining,
-        windowLabel: label,
         windowMinutes: 10080,
         resetsAt: resetsAt,
         planType: "pro",
@@ -117,10 +116,10 @@ func memory(usedGB: Double, percent: Int, pressure: MemoryPressure = .normal) ->
 func assertStableLayout() {
     let view = StatusView(frame: NSRect(x: 0, y: 0, width: StatusView.preferredWidth, height: 30))
     let states: [([AgentSnapshot], UsageInfo, MemoryInfo)] = [
-        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 20, label: "周", stale: false), memory(usedGB: 12.4, percent: 68)),
-        ([agent(.claude, "Claude", "sparkles", "D97757", .thinking, "Thinking", 100)], quota(remaining: 20, label: "周", stale: false), memory(usedGB: 12.4, percent: 68)),
-        ([agent(.claude, "Claude", "sparkles", "D97757", .needsInput, "Agent is asking a question", 100)], quota(remaining: 100, label: "周", stale: false), memory(usedGB: 30.1, percent: 92, pressure: .critical)),
-        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 8, label: "周", stale: true), memory(usedGB: 9.9, percent: 9)),
+        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 20, stale: false), memory(usedGB: 12.4, percent: 68)),
+        ([agent(.claude, "Claude", "sparkles", "D97757", .thinking, "Thinking", 100)], quota(remaining: 20, stale: false), memory(usedGB: 12.4, percent: 68)),
+        ([agent(.claude, "Claude", "sparkles", "D97757", .needsInput, "Agent is asking a question", 100)], quota(remaining: 100, stale: false), memory(usedGB: 30.1, percent: 92, pressure: .critical)),
+        ([agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100)], quota(remaining: 8, stale: true), memory(usedGB: 9.9, percent: 9)),
     ]
     var baseline: [CGFloat]?
     for (agents, usage, memory) in states {
@@ -199,14 +198,14 @@ struct RenderTest {
         // Codex quota chip beside the agent status.
         statusView.apply(agents: [
             agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
-        ], usage: quota(remaining: 21, label: "周", stale: false))
+        ], usage: quota(remaining: 21, stale: false))
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage.png")
 
         // Low headroom (alerting tier), sourced from a recorded snapshot.
         statusView.apply(agents: [
             agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
-        ], usage: quota(remaining: 8, label: "周", stale: true))
+        ], usage: quota(remaining: 8, stale: true))
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-usage-low.png")
 
@@ -220,7 +219,7 @@ struct RenderTest {
         // Memory + quota chips side by side (comfortable RAM).
         statusView.apply(agents: [
             agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
-        ], usage: quota(remaining: 21, label: "周", stale: false),
+        ], usage: quota(remaining: 21, stale: false),
            memory: memory(usedGB: 12.4, percent: 62),
            cpuPercent: 38)
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
@@ -229,7 +228,7 @@ struct RenderTest {
         // High memory pressure (red tier).
         statusView.apply(agents: [
             agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
-        ], usage: quota(remaining: 21, label: "周", stale: false),
+        ], usage: quota(remaining: 21, stale: false),
            memory: memory(usedGB: 30.1, percent: 92, pressure: .critical),
            cpuPercent: 72)
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
@@ -247,7 +246,7 @@ struct RenderTest {
         // No memory reading: right side must not invent a chip.
         statusView.apply(agents: [
             agent(.codex, "Codex", "bolt.fill", "10A37F", .ready, "Codex is ready", 100),
-        ], usage: quota(remaining: 21, label: "周", stale: false),
+        ], usage: quota(remaining: 21, stale: false),
            memory: nil)
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         snapshot(statusView, width: StatusView.preferredWidth, file: "render-memory-none.png")

@@ -127,10 +127,6 @@ final class ShimmerLabel: NSView {
         )
     }
 
-    var isActive: Bool {
-        return isShimmering
-    }
-
     func setShimmering(_ shimmering: Bool) {
         baseLayer.opacity = shimmering ? 0.70 : 1.0
         brightLayer.isHidden = !shimmering

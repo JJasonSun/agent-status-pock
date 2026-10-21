@@ -23,7 +23,6 @@ final class AgentTouchBarPreferencePane: NSViewController {
 
     @objc public static func reset() {
         AgentPrefs.defaults.removePersistentDomain(forName: AgentPrefs.suiteName)
-        NotificationCenter.default.post(name: AgentPrefs.changedNotification, object: nil)
     }
 
     @objc public func reset() {
@@ -203,7 +202,6 @@ final class AgentTouchBarPreferencePane: NSViewController {
         defaults.set(modes[max(visibilityControl.selectedSegment, 0)], forKey: "visibilityMode")
         defaults.set(shimmerSwitch.state == .on, forKey: "shimmerEnabled")
         defaults.synchronize()
-        NotificationCenter.default.post(name: AgentPrefs.changedNotification, object: nil)
     }
 
     private func updateControlAvailability() {

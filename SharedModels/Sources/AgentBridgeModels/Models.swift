@@ -120,7 +120,6 @@ public struct AgentSnapshot: Codable, Sendable {
 public struct UsageInfo: Codable, Sendable {
     public let remainingPercent: Int
     public let usedPercent: Int
-    public let windowLabel: String
     public let windowMinutes: Double
     public let resetsAt: TimeInterval?
     public let planType: String?
@@ -137,7 +136,6 @@ public struct UsageInfo: Codable, Sendable {
     public init(
         remainingPercent: Int,
         usedPercent: Int,
-        windowLabel: String,
         windowMinutes: Double,
         resetsAt: TimeInterval?,
         planType: String?,
@@ -148,7 +146,6 @@ public struct UsageInfo: Codable, Sendable {
     ) {
         self.remainingPercent = remainingPercent
         self.usedPercent = usedPercent
-        self.windowLabel = windowLabel
         self.windowMinutes = windowMinutes
         self.resetsAt = resetsAt
         self.planType = planType
@@ -164,7 +161,6 @@ public struct UsageInfo: Codable, Sendable {
         return UsageInfo(
             remainingPercent: 100,
             usedPercent: 0,
-            windowLabel: windowLabel,
             windowMinutes: windowMinutes,
             resetsAt: nil,
             planType: planType,
