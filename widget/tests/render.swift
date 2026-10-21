@@ -31,41 +31,10 @@ func stats(_ file: String) -> (full: Int, mid: Int, faint: Int) {
     return (full, mid, faint)
 }
 
-/// Counts non-background pixels in the right-hand strip of the rendered bar,
-/// which is where the Codex quota chip renders. The offscreen render paints
-/// the view 1:1 into a 2x canvas, so the strip is measured against the view's
-/// own width rather than the image width. The bar background is a dark grey
-/// below the brightness floor, so any lit pixel here is chip content.
-func rightStripLit(_ file: String, contentWidth: CGFloat, fraction: CGFloat = 0.20) -> Int {
-    let url = outDir.appendingPathComponent(file)
-    guard let img = NSImage(contentsOfFile: url.path),
-          let tiff = img.tiffRepresentation,
-          let rep = NSBitmapImageRep(data: tiff),
-          let data = rep.bitmapData else {
-        fatalError("unreadable \(file)")
-    }
-    let bpr = rep.bytesPerRow
-    let spp = rep.samplesPerPixel
-    let contentPixels = min(Int(contentWidth), rep.pixelsWide)
-    let startX = Int(CGFloat(contentPixels) * (1 - fraction))
-    var lit = 0
-    for y in 0..<rep.pixelsHigh {
-        for x in startX..<contentPixels {
-            let offset = y * bpr + x * spp
-            let r = Int(data[offset])
-            let g = Int(data[offset + 1])
-            let b = Int(data[offset + 2])
-            let a = Int(data[offset + spp - 1])
-            guard a > 200 else { continue }
-            if max(r, max(g, b)) > 70 { lit += 1 }
-        }
-    }
-    return lit
-}
-
-/// Counts non-background pixels in the strip just left of the quota chip,
-/// where the system RAM chip renders (~68–86% of the content width).
-func middleStripLit(_ file: String, contentWidth: CGFloat, startFraction: CGFloat = 0.68, endFraction: CGFloat = 0.86) -> Int {
+/// Counts non-background pixels in a horizontal strip of the rendered bar.
+/// The offscreen render paints the view 1:1 into a 2x canvas, so fractions
+/// are measured against the view's own width rather than the image width.
+func stripLit(_ file: String, contentWidth: CGFloat, startFraction: CGFloat, endFraction: CGFloat) -> Int {
     let url = outDir.appendingPathComponent(file)
     guard let img = NSImage(contentsOfFile: url.path),
           let tiff = img.tiffRepresentation,
@@ -139,8 +108,7 @@ func memory(usedGB: Double, percent: Int) -> MemoryInfo {
     MemoryInfo(
         usedBytes: UInt64(usedGB * 1_073_741_824),
         totalBytes: 34_359_738_368,
-        usedPercent: percent,
-        fetchedAt: 0
+        usedPercent: percent
     )
 }
 
@@ -262,17 +230,17 @@ struct RenderTest {
                      "shimmer band does not brighten active text enough")
         precondition(noagent.faint > 150, "no-agent text missing")
 
-        let usageLit = rightStripLit("render-usage.png", contentWidth: StatusView.preferredWidth)
-        let usageLowLit = rightStripLit("render-usage-low.png", contentWidth: StatusView.preferredWidth)
-        let usageNoneLit = rightStripLit("render-usage-none.png", contentWidth: StatusView.preferredWidth)
+        let usageLit = stripLit("render-usage.png", contentWidth: StatusView.preferredWidth, startFraction: 0.80, endFraction: 1.0)
+        let usageLowLit = stripLit("render-usage-low.png", contentWidth: StatusView.preferredWidth, startFraction: 0.80, endFraction: 1.0)
+        let usageNoneLit = stripLit("render-usage-none.png", contentWidth: StatusView.preferredWidth, startFraction: 0.80, endFraction: 1.0)
         precondition(usageLit > 60, "quota chip missing from the right edge")
         precondition(usageLowLit > 60, "low-headroom quota chip missing")
         precondition(usageNoneLit < usageLit / 3, "right edge occupied without a reading")
 
         // Memory chip occupies a strip left of the quota chip (~28–42%).
-        let memLit = middleStripLit("render-memory.png", contentWidth: StatusView.preferredWidth)
-        let memOnlyLit = middleStripLit("render-memory-only.png", contentWidth: StatusView.preferredWidth)
-        let memNoneLit = middleStripLit("render-memory-none.png", contentWidth: StatusView.preferredWidth)
+        let memLit = stripLit("render-memory.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
+        let memOnlyLit = stripLit("render-memory-only.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
+        let memNoneLit = stripLit("render-memory-none.png", contentWidth: StatusView.preferredWidth, startFraction: 0.68, endFraction: 0.86)
         precondition(memLit > 40, "memory chip missing beside the quota chip")
         precondition(memOnlyLit > 40, "memory chip missing when quota is absent")
         precondition(memNoneLit < memLit / 3, "memory strip occupied without a reading")

@@ -13,8 +13,16 @@ widget:
 package: widget
 	@echo "Archives are built by widget/build.sh; see widget/dist/."
 
-test: unit bridge widget
-	@set -e; (cd bridge && AGENTBRIDGE_PORT=39390 AGENTBRIDGE_STATE=/tmp/ab-test-state.json exec ./.build/release/AgentBridge > /tmp/ab-test.log 2>&1) & \
+watcher-test: widget
+	@cd widget && swiftc -parse-as-library -o dist/watcher-test tests/watcher.swift \
+		../SharedModels/Sources/AgentBridgeModels/Models.swift Sources/StateFileWatcher.swift && \
+		./dist/watcher-test
+
+installer-test:
+	@python3 scripts/test_merge_agent_hooks.py
+
+test: unit bridge widget watcher-test installer-test
+	@rm -f /tmp/ab-test-state.json; set -e; (cd bridge && AGENTBRIDGE_PORT=39390 AGENTBRIDGE_STATE=/tmp/ab-test-state.json exec ./.build/release/AgentBridge > /tmp/ab-test.log 2>&1) & \
 	pid=$$!; trap 'kill $$pid 2>/dev/null || true' EXIT; set -e; \
 	for attempt in $$(seq 1 20); do curl -fsS localhost:39390/v1/health > /dev/null && break; test $$attempt -lt 20 || { cat /tmp/ab-test.log >&2; exit 1; }; sleep 0.25; done; \
 	echo "bridge health: OK"; \

@@ -40,8 +40,7 @@ enum MemoryMonitor {
         return MemoryInfo(
             usedBytes: usedBytes,
             totalBytes: totalBytes,
-            usedPercent: usedPercent,
-            fetchedAt: Date().timeIntervalSince1970
+            usedPercent: usedPercent
         )
     }
 }

@@ -25,8 +25,8 @@ Then:
    **Agent Status** into your Touch Bar.
 2. Restart your Claude Code, Codex CLI, or OpenCode sessions.
 
-That is it. The bridge starts automatically at login, and the widget starts
-polling it as soon as you add it to the Touch Bar.
+That is it. The bridge starts automatically at login, and the widget watches
+the bridge's state file as soon as you add it to the Touch Bar.
 
 ## Quick checks
 

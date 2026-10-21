@@ -157,6 +157,23 @@ public struct UsageInfo: Codable, Sendable {
         self.source = source
         self.fetchedAt = fetchedAt
     }
+
+    /// A window whose reset time has passed starts over at 100% remaining.
+    public func rolledOver(now: TimeInterval) -> UsageInfo {
+        guard let resetsAt, resetsAt > 0, resetsAt < now else { return self }
+        return UsageInfo(
+            remainingPercent: 100,
+            usedPercent: 0,
+            windowLabel: windowLabel,
+            windowMinutes: windowMinutes,
+            resetsAt: nil,
+            planType: planType,
+            unlimited: unlimited,
+            stale: stale,
+            source: source,
+            fetchedAt: fetchedAt
+        )
+    }
 }
 
 // MARK: - System memory
@@ -165,13 +182,11 @@ public struct MemoryInfo: Codable, Sendable {
     public let usedBytes: UInt64
     public let totalBytes: UInt64
     public let usedPercent: Int
-    public let fetchedAt: TimeInterval
 
-    public init(usedBytes: UInt64, totalBytes: UInt64, usedPercent: Int, fetchedAt: TimeInterval) {
+    public init(usedBytes: UInt64, totalBytes: UInt64, usedPercent: Int) {
         self.usedBytes = usedBytes
         self.totalBytes = totalBytes
         self.usedPercent = usedPercent
-        self.fetchedAt = fetchedAt
     }
 }
 

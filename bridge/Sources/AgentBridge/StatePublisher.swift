@@ -34,9 +34,9 @@ final class StatePublisher: @unchecked Sendable {
     }
 
     func publish(_ state: BridgeState) {
-        guard let data = try? encoder.encode(state) else { return }
         lock.lock()
         defer { lock.unlock() }
+        guard let data = try? encoder.encode(state) else { return }
         if data == lastWritten { return }
         do {
             try FileManager.default.createDirectory(
@@ -44,6 +44,10 @@ final class StatePublisher: @unchecked Sendable {
                 withIntermediateDirectories: true
             )
             try data.write(to: path, options: .atomic)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: path.path
+            )
             lastWritten = data
         } catch {
             fputs("[AgentBridge] failed to write \(path.path): \(error)\n", stderr)

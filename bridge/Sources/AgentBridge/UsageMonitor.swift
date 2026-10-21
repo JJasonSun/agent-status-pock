@@ -77,8 +77,10 @@ final class UsageMonitor: @unchecked Sendable {
     func snapshot() -> UsageInfo? {
         lock.lock()
         defer { lock.unlock() }
-        guard var info = cached else { return nil }
-        info.stale = Date().timeIntervalSince1970 - info.fetchedAt > staleAfter
+        guard let cached else { return nil }
+        let now = Date().timeIntervalSince1970
+        var info = cached.rolledOver(now: now)
+        info.stale = now - info.fetchedAt > staleAfter
         return info
     }
 
@@ -246,7 +248,7 @@ final class UsageMonitor: @unchecked Sendable {
 
         // Session filenames embed their start timestamp, so a descending
         // name sort lists the most recent run first.
-        for offset in 0..<4 {
+        for offset in 0..<7 {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: Date()) else { continue }
             let parts = calendar.dateComponents([.year, .month, .day], from: day)
             guard let year = parts.year, let month = parts.month, let dayOfMonth = parts.day else { continue }
@@ -352,29 +354,20 @@ final class UsageMonitor: @unchecked Sendable {
     ) -> UsageInfo? {
         guard let windowMinutes, windowMinutes > 0 else { return nil }
 
-        var used = min(max(usedPercent ?? 0, 0), 100)
-        var effectiveResetsAt = resetsAt
-
-        // A window whose reset time has already passed rolled over, so the
-        // recorded percentage no longer describes the current period.
-        if let resets = resetsAt, resets > 0, resets < Date().timeIntervalSince1970 {
-            used = 0
-            effectiveResetsAt = nil
-        }
-
+        let used = min(max(usedPercent ?? 0, 0), 100)
         let remaining = unlimited ? 100 : Int((100 - used).rounded())
         return UsageInfo(
             remainingPercent: remaining,
             usedPercent: Int(used.rounded()),
             windowLabel: windowLabel(minutes: windowMinutes),
             windowMinutes: windowMinutes,
-            resetsAt: effectiveResetsAt,
+            resetsAt: resetsAt,
             planType: planType,
             unlimited: unlimited,
             stale: false,
             source: source,
             fetchedAt: fetchedAt
-        )
+        ).rolledOver(now: Date().timeIntervalSince1970)
     }
 
     private func windowLabel(minutes: Double) -> String {

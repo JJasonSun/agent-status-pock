@@ -12,7 +12,6 @@ final class StateFileWatcher {
     private let queue = DispatchQueue(label: "com.touchbar.agentstatus.statewatch")
     private var source: DispatchSourceFileSystemObject?
     private var fd: Int32 = -1
-    private var armedPath: String?
     private var isRunning = false
 
     /// Called on the main queue with each successfully decoded snapshot.
@@ -42,27 +41,28 @@ final class StateFileWatcher {
         queue.async { [weak self] in
             guard let self else { return }
             self.isRunning = false
-            self.source?.cancel()
-            self.source = nil
-            if self.fd >= 0 {
-                close(self.fd)
-                self.fd = -1
-            }
-            self.armedPath = nil
+            self.cancelSource()
         }
     }
 
     // MARK: - Private (queue-confined)
 
-    private func arm() {
-        guard isRunning else { return }
-        source?.cancel()
-        source = nil
-        if fd >= 0 {
+    /// The cancel handler owns the descriptor. Closing it here as well would
+    /// close the descriptor opened below after the OS reuses the same number.
+    private func cancelSource() {
+        if let source {
+            self.source = nil
+            fd = -1
+            source.cancel()
+        } else if fd >= 0 {
             close(fd)
             fd = -1
         }
-        armedPath = nil
+    }
+
+    private func arm() {
+        guard isRunning else { return }
+        cancelSource()
 
         let newFD = open(path, O_EVTONLY)
         guard newFD >= 0 else {
@@ -90,7 +90,6 @@ final class StateFileWatcher {
         src.resume()
         source = src
         fd = newFD
-        armedPath = path
     }
 
     private func reload() {

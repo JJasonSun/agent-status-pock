@@ -152,10 +152,8 @@ final class AgentHub: @unchecked Sendable {
             return
         }
 
-        // Immediate/high-priority activity invalidates a held quiet state.
-        if !AgentReducer.isQuietTransition(event) {
-            heldEvent[agent] = nil
-        }
+        // Any directly applied event supersedes a held quiet state.
+        heldEvent[agent] = nil
         apply(event: event, agent: agent, tool: tool, detail: detail, eventTime: eventTime)
         lock.unlock()
         onStateChange?()
@@ -168,6 +166,7 @@ final class AgentHub: @unchecked Sendable {
             return
         }
         if let last = lastEventAt[agent], held.ts < last - AgentReducer.staleTolerance {
+            heldEvent[agent] = nil
             lock.unlock()
             return
         }

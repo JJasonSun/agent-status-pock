@@ -9,8 +9,14 @@ let server = HTTPServer(hub: hub, port: port)
 // instead of polling HTTP. Event mutations publish immediately; a 1s tick
 // covers time-based transitions (transient expiry, inactivity, staleness).
 let publisher = StatePublisher(path: StatePublisher.defaultPath())
-hub.onStateChange = { publisher.publish(hub.snapshot()) }
-hub.usageMonitor.onStateChange = { publisher.publish(hub.snapshot()) }
+let publishQueue = DispatchQueue(label: "com.touchbar.agentbridge.publish")
+func publishCurrentState() {
+    publishQueue.async {
+        publisher.publish(hub.snapshot())
+    }
+}
+hub.onStateChange = publishCurrentState
+hub.usageMonitor.onStateChange = publishCurrentState
 
 // Begin collecting Codex quota readings for the Touch Bar chip.
 hub.usageMonitor.start()
@@ -18,9 +24,8 @@ hub.usageMonitor.start()
 signal(SIGPIPE, SIG_IGN)
 
 publisher.publish(hub.snapshot())
-let publishTimer = Timer(timeInterval: 1.0, repeats: true) { [weak hub] _ in
-    guard let hub else { return }
-    publisher.publish(hub.snapshot())
+let publishTimer = Timer(timeInterval: 1.0, repeats: true) { _ in
+    publishCurrentState()
 }
 RunLoop.main.add(publishTimer, forMode: .common)
 

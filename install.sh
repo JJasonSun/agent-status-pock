@@ -114,6 +114,7 @@ echo "==> Installing Codex hooks"
 CODEX_CONFIG="$HOME/.codex/config.toml"
 if [[ -f "$CODEX_CONFIG" ]] && grep -q "agentbridge-hook" "$CODEX_CONFIG" 2>/dev/null; then
     echo "    ~/.codex/config.toml already has AgentBridge hooks; skipping hooks.json"
+    python3 "$ROOT/scripts/merge_agent_hooks.py" codex-remove-hooks "$HOME/.codex/hooks.json"
 else
 CODEX_HOOKS="$HOME/.codex/hooks.json"
 python3 "$ROOT/scripts/merge_agent_hooks.py" codex \

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // agentbridge-hook <claude|codex>
 //
@@ -6,6 +7,8 @@ import Foundation
 // compact event to AgentBridge. Fire-and-forget: always exits 0 so a
 // missing bridge never fails the agent's hook, and the request is
 // bounded to a quarter second.
+
+signal(SIGPIPE, SIG_IGN)
 
 let agent = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "claude"
 let bridgeURL = ProcessInfo.processInfo.environment["AGENTBRIDGE_URL"]
@@ -44,7 +47,7 @@ if let detail = outbound.detail { payload["detail"] = detail }
 postJSON(urlString: bridgeURL + "/v1/event", payload: payload)
 exit(0)
 
-// MARK: - Mapping (mirrors hooks/agentbridge-hook.py)
+// MARK: - Mapping
 
 func mapEvent(
     hookEvent: String,
@@ -133,47 +136,65 @@ func summarize(_ toolInput: [String: Any]) -> String? {
 
 func postJSON(urlString: String, payload: [String: Any]) {
     guard let url = URL(string: urlString),
+          url.scheme == "http",
+          let host = url.host,
+          let port = url.port,
           let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
-
-    // Raw socket keeps the process tiny: no URLSession session spin-up
-    // on every hook invocation.
-    guard let host = url.host, let port = url.port else { return }
     let path = url.path.isEmpty ? "/" : url.path
 
-    let fd = socket(AF_INET, SOCK_STREAM, 0)
-    guard fd >= 0 else { return }
-    defer { close(fd) }
-
-    var timeout = timeval(tv_sec: 0, tv_usec: 250_000)
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-
-    var addr = sockaddr_in()
-    addr.sin_family = sa_family_t(AF_INET)
-    addr.sin_port = in_port_t(port).bigEndian
-    addr.sin_addr.s_addr = inet_addr(host)
-
-    let connected = withUnsafePointer(to: &addr) {
-        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-            connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-        }
+    // Raw socket keeps the process tiny: no URLSession session spin-up
+    // on every hook invocation. getaddrinfo also accepts "localhost" and
+    // IPv6, unlike inet_addr.
+    var hints = addrinfo()
+    hints.ai_family = AF_UNSPEC
+    hints.ai_socktype = SOCK_STREAM
+    var results: UnsafeMutablePointer<addrinfo>?
+    guard getaddrinfo(host, String(port), &hints, &results) == 0, let first = results else {
+        return
     }
-    guard connected == 0 else { return }
+    defer {
+        if let results { freeaddrinfo(results) }
+    }
 
+    let hostHeader = host.contains(":") ? "[\(host)]" : host
     var request = "POST \(path) HTTP/1.1\r\n"
-    request += "Host: \(host):\(port)\r\n"
+    request += "Host: \(hostHeader):\(port)\r\n"
     request += "Content-Type: application/json\r\n"
     request += "Content-Length: \(body.count)\r\n"
     request += "Connection: close\r\n\r\n"
 
     var out = Data(request.utf8)
     out.append(body)
-    _ = out.withUnsafeBytes { raw -> Int in
-        guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return -1 }
-        return send(fd, base, raw.count, 0)
+
+    var current: UnsafeMutablePointer<addrinfo>? = first
+    while let info = current {
+        let fd = socket(info.pointee.ai_family, info.pointee.ai_socktype, info.pointee.ai_protocol)
+        if fd >= 0 {
+            var timeout = timeval(tv_sec: 0, tv_usec: 250_000)
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+            var noSigPipe: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+
+            if let addr = info.pointee.ai_addr,
+               connect(fd, addr, info.pointee.ai_addrlen) == 0 {
+                var sent = 0
+                out.withUnsafeBytes { raw in
+                    guard let base = raw.baseAddress else { return }
+                    while sent < out.count {
+                        let count = send(fd, base.advanced(by: sent), out.count - sent, 0)
+                        if count <= 0 { break }
+                        sent += count
+                    }
+                }
+                // Best-effort drain so the peer can finish the response.
+                var sink = [UInt8](repeating: 0, count: 256)
+                _ = sink.withUnsafeMutableBytes { recv(fd, $0.baseAddress, $0.count, 0) }
+                close(fd)
+                return
+            }
+            close(fd)
+        }
+        current = info.pointee.ai_next
     }
-    // Best-effort drain so the peer can finish the response and we don't
-    // RST mid-reply; ignore failures.
-    var sink = [UInt8](repeating: 0, count: 256)
-    _ = recv(fd, &sink, sink.count, 0)
 }
