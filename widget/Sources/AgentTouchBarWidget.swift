@@ -138,6 +138,9 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
 
     private func fetchOverHTTP() {
         guard !isFetching else { return }
+        if receivedFromFile, let last = lastFileUpdate, Date().timeIntervalSince(last) < fileFreshWindow {
+            return
+        }
         isFetching = true
         client.fetchState { [weak self] state in
             DispatchQueue.main.async {
