@@ -89,13 +89,14 @@ func agent(_ a: AgentID, _ n: String, _ s: String, _ c: String, _ st: AgentStatu
     AgentSnapshot(agent: a, name: n, symbol: s, color: c, status: st, label: l, tool: nil, detail: nil, lastActive: la)
 }
 
-func quota(remaining: Int, label: String, stale: Bool) -> UsageInfo {
+func quota(remaining: Int, label: String, stale: Bool,
+           resetsAt: TimeInterval? = Date().timeIntervalSince1970 + 6 * 86_400) -> UsageInfo {
     UsageInfo(
         remainingPercent: remaining,
         usedPercent: 100 - remaining,
         windowLabel: label,
         windowMinutes: 10080,
-        resetsAt: nil,
+        resetsAt: resetsAt,
         planType: "pro",
         unlimited: false,
         stale: stale,

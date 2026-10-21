@@ -59,6 +59,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     /// if the DispatchSource ever dies, the bar must not freeze on a stale
     /// Thinking label.
     private var fallbackTimer: Timer?
+    private var countdownTimer: Timer?
     private var isFetching = false
     private var receivedFromFile = false
     private var lastFileUpdate: Date?
@@ -95,6 +96,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     private func startUpdates() {
         stateWatcher.start()
         startFallback()
+        startCountdown()
         // One immediate HTTP fetch so the bar is not blank before the first
         // file write or if the bridge predates state-file publishing.
         fetchOverHTTP()
@@ -103,6 +105,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     private func stopUpdates() {
         stateWatcher.stop()
         stopFallback()
+        stopCountdown()
     }
 
     private func startFallback() {
@@ -117,6 +120,20 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
     private func stopFallback() {
         fallbackTimer?.invalidate()
         fallbackTimer = nil
+    }
+
+    private func startCountdown() {
+        guard countdownTimer == nil else { return }
+        let timer = Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
+            self?.statusView.refreshCountdown()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        countdownTimer = timer
+    }
+
+    private func stopCountdown() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
     }
 
     private func fetchOverHTTP() {
