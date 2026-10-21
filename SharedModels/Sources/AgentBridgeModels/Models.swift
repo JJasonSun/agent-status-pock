@@ -178,15 +178,28 @@ public struct UsageInfo: Codable, Sendable {
 
 // MARK: - System memory
 
+public enum MemoryPressure: String, Codable, Sendable {
+    case normal
+    case warning
+    case critical
+}
+
 public struct MemoryInfo: Codable, Sendable {
     public let usedBytes: UInt64
     public let totalBytes: UInt64
     public let usedPercent: Int
+    public let pressure: MemoryPressure?
 
-    public init(usedBytes: UInt64, totalBytes: UInt64, usedPercent: Int) {
+    public init(
+        usedBytes: UInt64,
+        totalBytes: UInt64,
+        usedPercent: Int,
+        pressure: MemoryPressure? = nil
+    ) {
         self.usedBytes = usedBytes
         self.totalBytes = totalBytes
         self.usedPercent = usedPercent
+        self.pressure = pressure
     }
 }
 
@@ -199,10 +212,18 @@ public struct BridgeState: Codable, Sendable {
     public let usage: UsageInfo?
     /// System RAM reading for the Touch Bar chip.
     public let memory: MemoryInfo?
+    /// System CPU usage, rounded to 5% steps.
+    public let cpuPercent: Int?
 
-    public init(agents: [AgentSnapshot], usage: UsageInfo? = nil, memory: MemoryInfo? = nil) {
+    public init(
+        agents: [AgentSnapshot],
+        usage: UsageInfo? = nil,
+        memory: MemoryInfo? = nil,
+        cpuPercent: Int? = nil
+    ) {
         self.agents = agents
         self.usage = usage
         self.memory = memory
+        self.cpuPercent = cpuPercent
     }
 }

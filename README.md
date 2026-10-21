@@ -78,7 +78,7 @@ A source build requires Xcode Command Line Tools and Python 3.
 ## Features
 
 - **Live activity:** shows thinking, answering, editing, reading, searching, and shell execution with a subtle shimmer.
-- **Usage at a glance:** shows the remaining Codex weekly allowance and current system memory beside the agent status.
+- **Usage at a glance:** shows the remaining Codex weekly allowance, CPU usage, and memory pressure beside the agent status.
 - **Question alerts:** turns amber when an agent needs input so you know to return to the terminal.
 - **Multi-agent status:** follows the most recently active agent; tap the widget to cycle through active agents.
 - **Native and local:** the bridge listens only on `127.0.0.1`; no account, cloud service, or telemetry.

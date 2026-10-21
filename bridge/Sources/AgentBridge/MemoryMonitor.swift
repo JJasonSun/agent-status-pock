@@ -40,7 +40,23 @@ enum MemoryMonitor {
         return MemoryInfo(
             usedBytes: usedBytes,
             totalBytes: totalBytes,
-            usedPercent: usedPercent
+            usedPercent: usedPercent,
+            pressure: memoryPressure()
         )
+    }
+
+    /// `kern.memorystatus_vm_pressure_level`: 1 normal, 2 warning, 4 critical.
+    private static func memoryPressure() -> MemoryPressure? {
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0 else {
+            return nil
+        }
+        switch level {
+        case 1: return .normal
+        case 2: return .warning
+        case 4: return .critical
+        default: return nil
+        }
     }
 }

@@ -12,6 +12,8 @@ final class AgentHub: @unchecked Sendable {
     private var statuses: [AgentID: AgentSnapshot] = [:]
     /// Supplies the Codex quota chip; refreshes itself in the background.
     let usageMonitor = UsageMonitor()
+    /// Supplies the CPU reading for the system chip.
+    let cpuMonitor = CPUMonitor()
     /// Invoked after the hub lock is released whenever an event mutated state.
     /// Used to push a fresh snapshot to the state file; must not re-enter Hub.
     var onStateChange: (() -> Void)?
@@ -210,7 +212,8 @@ final class AgentHub: @unchecked Sendable {
         return BridgeState(
             agents: agents,
             usage: usageMonitor.snapshot(),
-            memory: MemoryMonitor.snapshot()
+            memory: MemoryMonitor.snapshot(),
+            cpuPercent: cpuMonitor.snapshot()
         )
     }
 }

@@ -78,7 +78,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
             guard let self else { return }
             self.receivedFromFile = true
             self.lastFileUpdate = Date()
-            self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory)
+            self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory, cpuPercent: state.cpuPercent)
         }
         AgentTouchBarWidget.shared = self
     }
@@ -151,7 +151,7 @@ public final class AgentTouchBarWidget: NSObject, PKWidget {
                     Date().timeIntervalSince($0) < self.fileFreshWindow
                 } ?? false
                 if !self.receivedFromFile || !fileFresh {
-                    self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory)
+                    self.statusView.apply(agents: state.agents, usage: state.usage, memory: state.memory, cpuPercent: state.cpuPercent)
                 }
             }
         }

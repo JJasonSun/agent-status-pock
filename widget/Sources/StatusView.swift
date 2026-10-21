@@ -28,7 +28,9 @@ final class StatusView: NSView {
 
     private let iconView = NSImageView(frame: .zero)
     private let label = ShimmerLabel(frame: .zero)
-    /// System RAM chip, immediately left of the quota chip.
+    /// CPU icon for the combined system chip.
+    private let cpuIcon = NSImageView(frame: .zero)
+    /// CPU + RAM chip, immediately left of the quota chip.
     private let memoryLabel = ShimmerLabel(frame: .zero)
     /// Always-on Codex quota chip, right-aligned beside the agent status.
     private let usageLabel = ShimmerLabel(frame: .zero)
@@ -39,9 +41,10 @@ final class StatusView: NSView {
     private var activeAgents: [AgentSnapshot] = []
     private var usage: UsageInfo?
     private var memory: MemoryInfo?
-    private let memorySlotWidth = chipSlotWidth("99.9G · 100%")
+    private var cpuPercent: Int?
+    private let memorySlotWidth = chipSlotWidth("100%·99.9G") + 16
     private let usageSlotWidth = chipSlotWidth("周100%·168h")
-    private let agentGroupX: CGFloat = 24
+    private let agentGroupX: CGFloat = 18
     private var selectedIndex = 0
     private var pinned = false
     private var pinnedSince: Date?
@@ -64,6 +67,11 @@ final class StatusView: NSView {
         iconView.wantsLayer = true
         addSubview(iconView)
         addSubview(label)
+
+        cpuIcon.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: nil)
+        cpuIcon.imageScaling = .scaleProportionallyDown
+        cpuIcon.isHidden = true
+        addSubview(cpuIcon)
 
         memoryLabel.setFont(size: 12, weight: .semibold)
         memoryLabel.setShimmering(false)
@@ -90,6 +98,7 @@ final class StatusView: NSView {
         if presentationWidth <= 1 {
             iconView.isHidden = true
             label.isHidden = true
+            cpuIcon.isHidden = true
             memoryLabel.isHidden = true
             usageLabel.isHidden = true
             return
@@ -98,6 +107,7 @@ final class StatusView: NSView {
             // Compact idle presentation is a bare logo; the right-side chips
             // are part of the full-width layout only.
             label.isHidden = true
+            cpuIcon.isHidden = true
             memoryLabel.isHidden = true
             usageLabel.isHidden = true
             iconView.isHidden = false
@@ -121,16 +131,18 @@ final class StatusView: NSView {
         let rightGroupWidth = memoryWidth + memoryGap + usageWidth
         let contentWidth = max(bounds.width - rightGroupWidth - usageGap, 80)
 
-        let maxTextWidth = max(contentWidth - agentGroupX - 20, 60)
+        let maxTextWidth = max(contentWidth - agentGroupX - 18, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
         iconView.frame = NSRect(x: agentGroupX, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.frame = NSRect(x: agentGroupX + 24, y: 0, width: textWidth, height: bounds.height)
 
         if memoryWidth > 0 {
+            let slotX = bounds.width - usageWidth - (usageWidth > 0 ? usageGap : 0) - memoryWidth
+            cpuIcon.frame = NSRect(x: slotX, y: (bounds.height - 12) / 2, width: 12, height: 12)
             memoryLabel.frame = NSRect(
-                x: bounds.width - usageWidth - (usageWidth > 0 ? usageGap : 0) - memoryWidth,
+                x: slotX + 16,
                 y: 0,
-                width: memoryWidth,
+                width: memoryWidth - 16,
                 height: bounds.height
             )
         }
@@ -164,10 +176,16 @@ final class StatusView: NSView {
 
     // MARK: State
 
-    func apply(agents: [AgentSnapshot], usage: UsageInfo? = nil, memory: MemoryInfo? = nil) {
+    func apply(
+        agents: [AgentSnapshot],
+        usage: UsageInfo? = nil,
+        memory: MemoryInfo? = nil,
+        cpuPercent: Int? = nil
+    ) {
         self.agents = agents
         self.usage = usage
         self.memory = memory
+        self.cpuPercent = cpuPercent
         activeAgents = agents.filter { $0.lastActive > 0 }
 
         refreshUsage()
@@ -261,28 +279,42 @@ final class StatusView: NSView {
 
     // MARK: Memory chip
 
-    /// Renders the system RAM chip just left of the quota chip:
-    /// "12.4G · 68%". Green below 70% used, amber 70–89%, red at 90%+.
+    /// Renders the combined CPU + RAM chip just left of the quota chip:
+    /// " 38%·12.4G". Color follows memory pressure.
     private func refreshMemory() {
         guard AgentPrefs.memoryEnabled, let memory = memory, memory.totalBytes > 0 else {
+            cpuIcon.isHidden = true
             memoryLabel.isHidden = true
             needsLayout = true
             return
         }
 
-        memoryLabel.text = Self.formatMemory(memory)
-        memoryLabel.textColor = Self.memoryColor(memory)
+        let cpuText = cpuPercent.map { String(format: "%3d%%", $0) } ?? " --%"
+        memoryLabel.text = "\(cpuText)·\(Self.formatMemory(memory))"
+        let color = Self.memoryColor(memory)
+        memoryLabel.textColor = color
+        cpuIcon.contentTintColor = color
+        cpuIcon.isHidden = false
         memoryLabel.isHidden = false
         needsLayout = true
     }
 
     static func formatMemory(_ memory: MemoryInfo) -> String {
         let gb = Double(memory.usedBytes) / 1_073_741_824.0
-        let used = gb < 100 ? String(format: "%.1fG", gb) : String(format: "%.0fG", gb)
-        return "\(used) · \(memory.usedPercent)%"
+        return gb < 100 ? String(format: "%.1fG", gb) : String(format: "%.0fG", gb)
     }
 
     private static func memoryColor(_ memory: MemoryInfo) -> NSColor {
+        if let pressure = memory.pressure {
+            switch pressure {
+            case .normal:
+                return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1)
+            case .warning:
+                return NSColor.systemYellow
+            case .critical:
+                return NSColor.systemRed
+            }
+        }
         switch memory.usedPercent {
         case ..<70:
             return NSColor(calibratedRed: 0.30, green: 0.85, blue: 0.55, alpha: 1)
