@@ -91,11 +91,6 @@ final class ShimmerLabel: NSView {
         updateTextGeometry()
     }
 
-    func setAlignment(_ alignment: CATextLayerAlignmentMode) {
-        baseLayer.alignmentMode = alignment
-        brightLayer.alignmentMode = alignment
-    }
-
     var text: String = "" {
         didSet {
             baseLayer.string = text

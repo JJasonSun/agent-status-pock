@@ -18,7 +18,7 @@ final class StatusView: NSView {
     /// Bounded width: wide enough for useful status text and the two
     /// right-side chips, but leaves room for Pock widgets and the system
     /// control strip on either side.
-    static let preferredWidth: CGFloat = 420
+    static let preferredWidth: CGFloat = 440
 
     // MARK: Callbacks
 
@@ -32,6 +32,8 @@ final class StatusView: NSView {
     private let cpuIcon = NSImageView(frame: .zero)
     /// CPU + RAM chip, immediately left of the quota chip.
     private let memoryLabel = ShimmerLabel(frame: .zero)
+    /// Calendar icon for the quota chip.
+    private let usageIcon = NSImageView(frame: .zero)
     /// Always-on Codex quota chip, right-aligned beside the agent status.
     private let usageLabel = ShimmerLabel(frame: .zero)
 
@@ -43,7 +45,9 @@ final class StatusView: NSView {
     private var memory: MemoryInfo?
     private var cpuPercent: Int?
     private let memorySlotWidth = chipSlotWidth("100%·99.9G") + 16
-    private let usageSlotWidth = chipSlotWidth("周100%·168h")
+    private let usageSlotWidth = chipSlotWidth("100%·168h") + 16
+    private let chipGap: CGFloat = 20
+    private let rightPadding: CGFloat = 20
     private let agentGroupX: CGFloat = 18
     private var selectedIndex = 0
     private var pinned = false
@@ -78,8 +82,12 @@ final class StatusView: NSView {
         memoryLabel.isHidden = true
         addSubview(memoryLabel)
 
+        usageIcon.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        usageIcon.imageScaling = .scaleProportionallyDown
+        usageIcon.isHidden = true
+        addSubview(usageIcon)
+
         usageLabel.setFont(size: 12, weight: .semibold)
-        usageLabel.setAlignment(.right)
         usageLabel.setShimmering(false)
         usageLabel.isHidden = true
         addSubview(usageLabel)
@@ -100,6 +108,7 @@ final class StatusView: NSView {
             label.isHidden = true
             cpuIcon.isHidden = true
             memoryLabel.isHidden = true
+            usageIcon.isHidden = true
             usageLabel.isHidden = true
             return
         }
@@ -109,6 +118,7 @@ final class StatusView: NSView {
             label.isHidden = true
             cpuIcon.isHidden = true
             memoryLabel.isHidden = true
+            usageIcon.isHidden = true
             usageLabel.isHidden = true
             iconView.isHidden = false
             iconView.frame = NSRect(
@@ -126,10 +136,9 @@ final class StatusView: NSView {
         // agent group and both chips from shifting as their text changes.
         let usageWidth = usageLabel.isHidden ? 0 : usageSlotWidth
         let memoryWidth = memoryLabel.isHidden ? 0 : memorySlotWidth
-        let usageGap: CGFloat = usageWidth > 0 ? 12 : 0
-        let memoryGap: CGFloat = memoryWidth > 0 ? 12 : 0
-        let rightGroupWidth = memoryWidth + memoryGap + usageWidth
-        let contentWidth = max(bounds.width - rightGroupWidth - usageGap, 80)
+        let gap = (usageWidth > 0 && memoryWidth > 0) ? chipGap : 0
+        let rightGroupWidth = memoryWidth + gap + usageWidth
+        let contentWidth = max(bounds.width - rightGroupWidth - rightPadding, 80)
 
         let maxTextWidth = max(contentWidth - agentGroupX - 18, 60)
         let textWidth = min(label.measuredWidth, maxTextWidth)
@@ -137,7 +146,7 @@ final class StatusView: NSView {
         label.frame = NSRect(x: agentGroupX + 24, y: 0, width: textWidth, height: bounds.height)
 
         if memoryWidth > 0 {
-            let slotX = bounds.width - usageWidth - (usageWidth > 0 ? usageGap : 0) - memoryWidth
+            let slotX = bounds.width - usageWidth - gap - memoryWidth
             cpuIcon.frame = NSRect(x: slotX, y: (bounds.height - 12) / 2, width: 12, height: 12)
             memoryLabel.frame = NSRect(
                 x: slotX + 16,
@@ -147,10 +156,12 @@ final class StatusView: NSView {
             )
         }
         if usageWidth > 0 {
+            let slotX = bounds.width - usageWidth
+            usageIcon.frame = NSRect(x: slotX, y: (bounds.height - 12) / 2, width: 12, height: 12)
             usageLabel.frame = NSRect(
-                x: bounds.width - usageWidth,
+                x: slotX + 16,
                 y: 0,
-                width: usageWidth,
+                width: usageWidth - 16,
                 height: bounds.height
             )
         }
@@ -235,6 +246,7 @@ final class StatusView: NSView {
     /// (recorded rather than queried) is dimmed instead of re-labelled.
     private func refreshUsage() {
         guard AgentPrefs.usageEnabled, let usage = usage, usage.remainingPercent >= 0 else {
+            usageIcon.isHidden = true
             usageLabel.isHidden = true
             needsLayout = true
             return
@@ -242,9 +254,14 @@ final class StatusView: NSView {
 
         usageLabel.text = usage.unlimited
             ? "∞"
-            : "\(usage.windowLabel)\(usage.remainingPercent)%\(Self.resetSuffix(for: usage, now: Date()))"
-        usageLabel.textColor = Self.usageColor(usage)
-        usageLabel.alphaValue = usage.stale ? 0.85 : 1
+            : "\(usage.remainingPercent)%\(Self.resetSuffix(for: usage, now: Date()))"
+        let color = Self.usageColor(usage)
+        usageLabel.textColor = color
+        let alpha: CGFloat = usage.stale ? 0.85 : 1
+        usageLabel.alphaValue = alpha
+        usageIcon.contentTintColor = color
+        usageIcon.alphaValue = alpha
+        usageIcon.isHidden = false
         usageLabel.isHidden = false
         needsLayout = true
     }
