@@ -20,6 +20,7 @@ hub.usageMonitor.onStateChange = publishCurrentState
 
 // Begin collecting Codex quota readings for the Touch Bar chip.
 hub.usageMonitor.start()
+hub.cpuMonitor.start()
 
 signal(SIGPIPE, SIG_IGN)
 
