@@ -9,6 +9,7 @@ import AgentBridgeCore
 final class AgentHub: @unchecked Sendable {
 
     private let lock = NSLock()
+    private let maxLogBytes: UInt64 = 1_048_576
     private var statuses: [AgentID: AgentSnapshot] = [:]
     /// Supplies the Codex quota chip; refreshes itself in the background.
     let usageMonitor = UsageMonitor()
@@ -76,6 +77,7 @@ final class AgentHub: @unchecked Sendable {
             .appendingPathComponent(".agentbridge/logs")
         try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
         let path = (logDir as NSString).appendingPathComponent("events.log")
+        rotateLogIfNeeded(path)
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
         if let handle = FileHandle(forWritingAtPath: path) {
             handle.seekToEndOfFile()
@@ -84,6 +86,15 @@ final class AgentHub: @unchecked Sendable {
         } else {
             try? line.write(toFile: path, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func rotateLogIfNeeded(_ path: String) {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let size = (attrs[.size] as? NSNumber)?.uint64Value,
+              size > maxLogBytes else { return }
+        let rotated = path + ".1"
+        try? FileManager.default.removeItem(atPath: rotated)
+        try? FileManager.default.moveItem(atPath: path, toPath: rotated)
     }
 
     // MARK: Events

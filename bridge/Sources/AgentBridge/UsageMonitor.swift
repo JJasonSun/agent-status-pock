@@ -1,5 +1,6 @@
 import Foundation
 import AgentBridgeModels
+import Darwin
 
 // MARK: - Monitor
 
@@ -159,7 +160,7 @@ final class UsageMonitor: @unchecked Sendable {
 
         // Watchdog: terminating the child closes stdout, ending the read loop.
         DispatchQueue.global().asyncAfter(deadline: .now() + liveTimeout) {
-            if process.isRunning { process.terminate() }
+            self.terminate(process)
         }
 
         let output = stdoutPipe.fileHandleForReading
@@ -219,8 +220,16 @@ final class UsageMonitor: @unchecked Sendable {
             }
         }
 
-        if process.isRunning { process.terminate() }
+        terminate(process)
         return result
+    }
+
+    private func terminate(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
     }
 
     private func usage(fromLive payload: [String: Any]) -> UsageInfo? {
@@ -359,7 +368,6 @@ final class UsageMonitor: @unchecked Sendable {
         return UsageInfo(
             remainingPercent: remaining,
             usedPercent: Int(used.rounded()),
-            windowLabel: windowLabel(minutes: windowMinutes),
             windowMinutes: windowMinutes,
             resetsAt: resetsAt,
             planType: planType,
@@ -368,15 +376,6 @@ final class UsageMonitor: @unchecked Sendable {
             source: source,
             fetchedAt: fetchedAt
         ).rolledOver(now: Date().timeIntervalSince1970)
-    }
-
-    private func windowLabel(minutes: Double) -> String {
-        if minutes >= 10_000 { return "周" }
-        if minutes >= 1_400 { return "日" }
-        if minutes >= 60, minutes.truncatingRemainder(dividingBy: 60) == 0 {
-            return "\(Int(minutes / 60))h"
-        }
-        return "\(Int(minutes))m"
     }
 
     private func number(_ value: Any?) -> Double? {
