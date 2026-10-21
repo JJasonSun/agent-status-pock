@@ -35,7 +35,11 @@ test: unit bridge widget watcher-test installer-test
 	  | AGENTBRIDGE_URL=http://127.0.0.1:39390 ./bridge/.build/release/AgentBridgeHook claude; \
 	for attempt in $$(seq 1 20); do grep -q 'hook.swift' /tmp/ab-test-state.json 2>/dev/null && break; test $$attempt -lt 20 || { echo "swift hook never reached the bridge" >&2; exit 1; }; sleep 0.1; done; \
 	echo "swift hook: OK"
-	@cd widget && swiftc -o dist/smoke-test tests/smoke.swift && ./dist/smoke-test
+	@if [ -d /Applications/Pock.app ]; then \
+		cd widget && swiftc -o dist/smoke-test tests/smoke.swift && ./dist/smoke-test; \
+	else \
+		echo "smoke test: SKIPPED (Pock.app not installed)"; \
+	fi
 	@cd widget && swiftc -parse-as-library -o dist/render-test tests/render.swift ../SharedModels/Sources/AgentBridgeModels/Models.swift Sources/*.swift -I dist -L dist/lib -lPockKit -Xlinker -rpath -Xlinker "$$PWD/dist/lib" && ./dist/render-test | grep -v "^{\"ok"
 
 install:
